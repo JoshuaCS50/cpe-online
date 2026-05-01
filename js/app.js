@@ -9,7 +9,7 @@ import {
   extensionForLanguage,
 } from "./storage.js";
 import { EXAMPLES, findExample } from "./examples.js";
-import { run as runProgram, ASYNC_LANGUAGES } from "./runners/index.js";
+import { run as runProgram, ASYNC_LANGUAGES, STREAMABLE_LANGUAGES } from "./runners/index.js";
 
 // Common code snippets, language-aware. Each has { label, lang(s), text, cursor? }.
 const SNIPPETS = [
@@ -43,6 +43,7 @@ const DEFAULT_STATE = {
     fontSize: 15,
     wrap: false,
     seenOnboarding: false,
+    streamingMode: false,
   },
 };
 
@@ -127,6 +128,7 @@ function activateTab(id) {
   document.getElementById("language-select").value = tab.language;
   renderTabs();
   renderSnippets();
+  updateRunModeBadge();
   persist();
 }
 
@@ -208,10 +210,13 @@ async function runCode() {
   consoleIO.cancelPendingReads();
   setRunning(true, tab.language);
   try {
+    const useStreaming =
+      !!state.settings.streamingMode && STREAMABLE_LANGUAGES.has(tab.language);
     await runProgram({
       language: tab.language,
       code: tab.doc,
       consoleIO,
+      streaming: useStreaming,
       onErrorLine: (lineNum) => editor.highlightErrorLine(lineNum),
     });
   } catch (err) {
@@ -243,6 +248,20 @@ function setRunning(running, language) {
   const showStop = ASYNC_LANGUAGES.has(language);
   stopBtn.style.display = showStop ? "" : "none";
   stopBtn.disabled = !running || !showStop;
+}
+
+function updateRunModeBadge() {
+  const badge = document.getElementById("run-mode-badge");
+  if (!badge) return;
+  const lang = getActiveTab().language;
+  const streamable = STREAMABLE_LANGUAGES.has(lang);
+  if (streamable && state.settings.streamingMode) {
+    badge.hidden = false;
+    badge.textContent = "live";
+    badge.title = "Streaming mode — output appears as printf fires (no mid-run prompts)";
+  } else {
+    badge.hidden = true;
+  }
 }
 
 // ───── Save / Open ─────
@@ -462,6 +481,7 @@ function init() {
   document.getElementById("theme-select").value = state.settings.theme;
   document.getElementById("font-size").value = state.settings.fontSize;
   document.getElementById("line-wrap").checked = state.settings.wrap;
+  document.getElementById("streaming-mode").checked = !!state.settings.streamingMode;
 
   // Wire controls
   document.getElementById("run-button").addEventListener("click", runCode);
@@ -487,6 +507,7 @@ function init() {
     editor.setLanguage(tab.language);
     renderTabs();
     renderSnippets();
+    updateRunModeBadge();
     persist();
   });
 
@@ -533,11 +554,31 @@ function init() {
     editor.setWrap(state.settings.wrap);
     persist();
   });
+  document.getElementById("streaming-mode").addEventListener("change", (e) => {
+    state.settings.streamingMode = e.target.checked;
+    updateRunModeBadge();
+    persist();
+  });
+
+  // Inputs panel — multi-line, paste all values, queue at once.
+  document.getElementById("inputs-queue").addEventListener("click", () => {
+    const ta = document.getElementById("inputs-textarea");
+    const text = (ta.value || "").trim();
+    if (!text) return;
+    consoleIO.pushStdin(text);
+    ta.value = "";
+    closeMenu();
+  });
+  document.getElementById("inputs-clear").addEventListener("click", () => {
+    consoleIO.resetInput();
+    document.getElementById("inputs-textarea").value = "";
+  });
 
   renderExamples();
   renderSnippets();
   wireSymbolBar();
   wireDivider();
+  updateRunModeBadge();
   maybeShowQuickStart();
   registerSW();
 

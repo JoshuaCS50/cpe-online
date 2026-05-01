@@ -167,14 +167,33 @@ export async function runC({ code, consoleIO, signal, onErrorLine }) {
       const buffered = consoleIO.drainBuffer();
       if (buffered) return buffered;
 
-      // Fall back to a blocking prompt(). Show the most recent line of
-      // output as the prompt label so the user sees what's being asked.
+      // Fall back to a blocking prompt(). Read the trailing un-newlined text
+      // from the output panel and use it as the prompt label, so the user
+      // sees exactly what the program just printed (e.g. "Enter A:").
       promptCount += 1;
-      let label = "Program is asking for input:";
-      if (promptCount > 20) {
+      if (promptCount > 100) {
         // Safety: refuse to keep prompting forever in case of an infinite read.
         return "";
       }
+      let label = "Program is asking for input";
+      try {
+        const outputEl = document.getElementById("output");
+        if (outputEl) {
+          const fullText = outputEl.textContent || "";
+          // Find text after the last newline — this is the un-flushed prompt.
+          const lastNl = fullText.lastIndexOf("\n");
+          const tail = lastNl >= 0 ? fullText.slice(lastNl + 1) : fullText;
+          const cleaned = tail.trim();
+          if (cleaned) {
+            label = cleaned;
+          } else {
+            // No tail — show recent context (last non-empty line).
+            const lines = fullText.split("\n").filter((s) => s.trim());
+            if (lines.length) label = lines[lines.length - 1].trim();
+          }
+        }
+      } catch (_) { /* fall back to default label */ }
+
       let answer = null;
       try {
         answer = window.prompt(label, "");
