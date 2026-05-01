@@ -1,0 +1,13 @@
+# Local dev / IDE
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Plan file (kept local)
+plan.md

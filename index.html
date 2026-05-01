@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#1e1e2e" />
+  <meta name="description" content="CPE Online — a mobile-friendly web IDE for C, C++, Python, and Java. Runs fully offline in your browser after the first visit." />
+  <title>CPE Online — Mobile C/C++ IDE</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231e1e2e'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='monospace' font-size='26' font-weight='700' fill='%2389b4fa'%3E%7B%7D%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <header class="top-bar" role="banner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">{}</span>
+      <span class="brand-name">CPE Online</span>
+    </div>
+    <div class="top-bar-right">
+      <label class="lang-picker">
+        <span class="sr-only">Language</span>
+        <select id="language-select" aria-label="Select language">
+          <option value="c">C</option>
+          <option value="cpp">C++</option>
+          <option value="python">Python</option>
+          <option value="java">Java (preview)</option>
+        </select>
+      </label>
+      <button id="menu-button" class="icon-button" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <nav class="tabs-bar" aria-label="Open files">
+    <div id="tabs" class="tabs" role="tablist"></div>
+    <button id="new-tab" class="icon-button tab-add" aria-label="New file">＋</button>
+  </nav>
+
+  <main class="workspace" id="workspace">
+    <section class="editor-pane" aria-label="Code editor">
+      <div id="editor" class="editor" role="textbox" aria-multiline="true" aria-label="Source code"></div>
+    </section>
+
+    <div class="divider" id="divider" role="separator" aria-orientation="horizontal" aria-label="Resize editor and output" tabindex="0"></div>
+
+    <section class="output-pane" aria-label="Program output">
+      <div class="output-header">
+        <span>Output</span>
+        <button id="clear-output" class="text-button" aria-label="Clear output">Clear</button>
+      </div>
+      <pre id="output" class="output" aria-live="polite" aria-atomic="false"></pre>
+      <form id="stdin-form" class="stdin-row" autocomplete="off">
+        <label class="sr-only" for="stdin-input">Standard input</label>
+        <input id="stdin-input" class="stdin-input" type="text" inputmode="text" placeholder="Type input for the program, press Enter…" />
+        <button type="submit" class="text-button">Send</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="action-bar" role="toolbar" aria-label="Main actions">
+    <button id="run-button" class="action-btn action-btn--primary">
+      <span aria-hidden="true">▶</span> Run
+    </button>
+    <button id="stop-button" class="action-btn" disabled>
+      <span aria-hidden="true">■</span> Stop
+    </button>
+    <button id="save-button" class="action-btn" aria-label="Save current file to device">
+      <span aria-hidden="true">⬇</span> Save
+    </button>
+    <button id="open-button" class="action-btn" aria-label="Open a file from device">
+      <span aria-hidden="true">⬆</span> Open
+    </button>
+    <input id="file-input" type="file" accept=".c,.cpp,.cc,.cxx,.h,.hpp,.py,.java,.txt" hidden />
+  </footer>
+
+  <!-- Slide-out menu -->
+  <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+  <aside id="menu" class="menu" hidden aria-hidden="true" aria-label="Main menu">
+    <div class="menu-header">
+      <span>Menu</span>
+      <button id="menu-close" class="icon-button" aria-label="Close menu">✕</button>
+    </div>
+    <div class="menu-section">
+      <button class="menu-item" data-action="new">New file</button>
+      <button class="menu-item" data-action="open">Open file…</button>
+      <button class="menu-item" data-action="save">Save as…</button>
+      <button class="menu-item" data-action="rename">Rename current tab…</button>
+      <button class="menu-item" data-action="close-tab">Close current tab</button>
+    </div>
+    <div class="menu-section">
+      <div class="menu-heading">Examples</div>
+      <div id="examples-list" class="examples-list"></div>
+    </div>
+    <div class="menu-section">
+      <div class="menu-heading">Settings</div>
+      <label class="menu-field">
+        Theme
+        <select id="theme-select">
+          <option value="auto">Auto</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </label>
+      <label class="menu-field">
+        Font size
+        <input id="font-size" type="range" min="12" max="22" step="1" />
+      </label>
+      <label class="menu-field menu-field--row">
+        <span>Wrap long lines</span>
+        <input id="line-wrap" type="checkbox" />
+      </label>
+    </div>
+    <div class="menu-footer">
+      <span class="version">CPE Online v1.0</span>
+    </div>
+  </aside>
+
+  <!-- Onboarding toast -->
+  <div id="onboarding" class="onboarding" hidden role="status">
+    Tap <strong>▶ Run</strong> to try the example. Your code is auto-saved to this device.
+    <button id="onboarding-dismiss" class="text-button">Got it</button>
+  </div>
+
+  <!-- Third-party libraries: CodeMirror 5 core + modes, JSCPP as UMD. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="vendor/JSCPP.es5.min.js?v=2.0.6"></script>
+  <script type="module" src="js/app.js?v=3"></script>
+</body>
+</html>
