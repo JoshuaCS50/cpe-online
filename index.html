@@ -39,6 +39,22 @@
 
   <main class="workspace" id="workspace">
     <section class="editor-pane" aria-label="Code editor">
+      <!-- Symbol bar — one-tap insertion of common C symbols on phone keyboards -->
+      <div id="symbol-bar" class="symbol-bar" role="toolbar" aria-label="Insert symbol">
+        <button class="sym" data-insert="{}" data-cursor="-1" aria-label="Insert curly braces">{ }</button>
+        <button class="sym" data-insert="()" data-cursor="-1" aria-label="Insert parentheses">( )</button>
+        <button class="sym" data-insert="[]" data-cursor="-1" aria-label="Insert square brackets">[ ]</button>
+        <button class="sym" data-insert=";" aria-label="Insert semicolon">;</button>
+        <button class="sym" data-insert="&quot;&quot;" data-cursor="-1" aria-label="Insert double quotes">" "</button>
+        <button class="sym" data-insert="&lt;&gt;" data-cursor="-1" aria-label="Insert angle brackets">&lt; &gt;</button>
+        <button class="sym" data-insert="#" aria-label="Insert hash">#</button>
+        <button class="sym" data-insert="&amp;" aria-label="Insert ampersand">&amp;</button>
+        <button class="sym" data-insert="*" aria-label="Insert asterisk">*</button>
+        <button class="sym" data-insert="=" aria-label="Insert equals">=</button>
+        <button class="sym" data-insert="-&gt;" aria-label="Insert arrow">-&gt;</button>
+        <button class="sym" data-insert="\\n" aria-label="Insert newline escape">\n</button>
+        <button class="sym sym-tab" data-key="Tab" aria-label="Indent">⇥</button>
+      </div>
       <div id="editor" class="editor" role="textbox" aria-multiline="true" aria-label="Source code"></div>
     </section>
 
@@ -51,8 +67,8 @@
       </div>
       <pre id="output" class="output" aria-live="polite" aria-atomic="false"></pre>
       <form id="stdin-form" class="stdin-row" autocomplete="off">
-        <label class="sr-only" for="stdin-input">Standard input</label>
-        <input id="stdin-input" class="stdin-input" type="text" inputmode="text" placeholder="Type input for the program, press Enter…" />
+        <label class="stdin-label" for="stdin-input" title="If your C program uses scanf, type the input here BEFORE pressing Run.">Input&nbsp;⮕</label>
+        <input id="stdin-input" class="stdin-input" type="text" inputmode="text" placeholder="Type any scanf input here, press Send (or Enter)…" />
         <button type="submit" class="text-button">Send</button>
       </form>
     </section>
@@ -87,6 +103,12 @@
       <button class="menu-item" data-action="save">Save as…</button>
       <button class="menu-item" data-action="rename">Rename current tab…</button>
       <button class="menu-item" data-action="close-tab">Close current tab</button>
+      <button class="menu-item" data-action="reset-default">Reset to Hello World</button>
+      <button class="menu-item" data-action="show-help">How to use ▶ Quick start</button>
+    </div>
+    <div class="menu-section">
+      <div class="menu-heading">Insert snippet</div>
+      <div id="snippets-list" class="snippets-list"></div>
     </div>
     <div class="menu-section">
       <div class="menu-heading">Examples</div>
@@ -116,10 +138,26 @@
     </div>
   </aside>
 
-  <!-- Onboarding toast -->
-  <div id="onboarding" class="onboarding" hidden role="status">
-    Tap <strong>▶ Run</strong> to try the example. Your code is auto-saved to this device.
-    <button id="onboarding-dismiss" class="text-button">Got it</button>
+  <!-- Quick Start modal — shown on first visit and from the menu -->
+  <div id="quickstart-backdrop" class="modal-backdrop" hidden></div>
+  <div id="quickstart" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="qs-title">
+    <header class="modal-header">
+      <h2 id="qs-title">Welcome to CPE Online</h2>
+      <button id="quickstart-close" class="icon-button" aria-label="Close">✕</button>
+    </header>
+    <div class="modal-body">
+      <p class="qs-lead">A C / C++ / Python IDE that runs on your phone — <strong>no internet needed after the first visit</strong>.</p>
+      <ol class="qs-steps">
+        <li><strong>Edit your code</strong> in the editor. Tap the symbol bar above the keyboard for <code>{ } ; ( )</code> etc.</li>
+        <li><strong>Need input?</strong> Type it into the <em>Input</em> row at the bottom of the Output panel <em>before</em> pressing Run (for C / C++).</li>
+        <li><strong>Tap ▶ Run</strong> to compile and run. Output appears in the bottom panel.</li>
+        <li><strong>Save</strong> downloads your file as <code>.c</code>, <code>.cpp</code>, <code>.py</code>, or <code>.java</code>. <strong>Open</strong> brings them back.</li>
+      </ol>
+      <p class="qs-tip">💡 Tap the <strong>☰</strong> menu for examples, snippets, themes, and the full help.</p>
+    </div>
+    <footer class="modal-footer">
+      <button id="quickstart-try" class="action-btn action-btn--primary">Got it — let's code</button>
+    </footer>
   </div>
 
   <!-- Third-party libraries: CodeMirror 5 core + modes, JSCPP as UMD. -->
@@ -127,6 +165,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="vendor/JSCPP.es5.min.js?v=2.0.6"></script>
-  <script type="module" src="js/app.js?v=3"></script>
+  <script type="module" src="js/app.js?v=5"></script>
 </body>
 </html>

@@ -33,7 +33,7 @@ export function createEditor(parent, { initialDoc = "", language = "c", onChange
     indentUnit: 4,
     tabSize: 4,
     smartIndent: true,
-    autoCloseBrackets: false, // stay lean on mobile
+    autoCloseBrackets: true, // beginner-friendly: { → }, ( → ), " → "
     matchBrackets: true,
     lineWrapping: wrap,
     viewportMargin: Infinity,
@@ -42,6 +42,41 @@ export function createEditor(parent, { initialDoc = "", language = "c", onChange
     autocorrect: false,
     autocapitalize: false,
   });
+
+  // Track an "error line" that we can highlight when JSCPP reports a problem.
+  let errorLineHandle = null;
+
+  function clearErrorLine() {
+    if (errorLineHandle != null) {
+      cm.removeLineClass(errorLineHandle, "background", "error-line");
+      cm.removeLineClass(errorLineHandle, "gutter", "error-gutter");
+      errorLineHandle = null;
+    }
+  }
+
+  function highlightErrorLine(lineNumber1Based) {
+    clearErrorLine();
+    const idx = Math.max(0, (lineNumber1Based || 1) - 1);
+    if (idx >= cm.lineCount()) return;
+    errorLineHandle = cm.addLineClass(idx, "background", "error-line");
+    cm.addLineClass(idx, "gutter", "error-gutter");
+    cm.scrollIntoView({ line: idx, ch: 0 }, 80);
+  }
+
+  function insertText(text, cursorOffset) {
+    const cursor = cm.getCursor();
+    cm.replaceSelection(text);
+    if (typeof cursorOffset === "number" && cursorOffset !== 0) {
+      // Move the cursor by the offset (used so {} inserts and lands cursor between).
+      const newCursor = cm.getCursor();
+      cm.setCursor({ line: newCursor.line, ch: newCursor.ch + cursorOffset });
+    }
+    cm.focus();
+  }
+
+  function insertAtCursor(text) {
+    insertText(text, 0);
+  }
 
   // Make the editor fill the container.
   const wrapper = cm.getWrapperElement();
@@ -61,7 +96,10 @@ export function createEditor(parent, { initialDoc = "", language = "c", onChange
   return {
     cm,
     getDoc: () => cm.getValue(),
-    setDoc: (text) => cm.setValue(text),
+    setDoc: (text) => {
+      clearErrorLine();
+      cm.setValue(text);
+    },
     setLanguage: (lang) => cm.setOption("mode", cmModeForLang(lang)),
     setWrap: (w) => cm.setOption("lineWrapping", !!w),
     setFontSize: (px) => {
@@ -70,6 +108,21 @@ export function createEditor(parent, { initialDoc = "", language = "c", onChange
     },
     setTheme: (themeName) => cm.setOption("theme", themeName),
     focus: () => cm.focus(),
+    insertText,
+    insertAtCursor,
+    triggerKey: (key) => {
+      if (key === "Tab") {
+        // Mimic the indent action.
+        if (cm.somethingSelected()) {
+          cm.execCommand("indentMore");
+        } else {
+          cm.replaceSelection("    ");
+        }
+        cm.focus();
+      }
+    },
+    highlightErrorLine,
+    clearErrorLine,
     destroy: () => {
       ro.disconnect();
       wrapper.remove();

@@ -9,7 +9,22 @@ import {
   extensionForLanguage,
 } from "./storage.js";
 import { EXAMPLES, findExample } from "./examples.js";
-import { run as runProgram } from "./runners/index.js";
+import { run as runProgram, ASYNC_LANGUAGES } from "./runners/index.js";
+
+// Common code snippets, language-aware. Each has { label, lang(s), text, cursor? }.
+const SNIPPETS = [
+  { label: "main", langs: ["c", "cpp"], text: 'int main() {\n    \n    return 0;\n}\n', cursor: -10 },
+  { label: 'printf("");', langs: ["c", "cpp"], text: 'printf("");', cursor: -3 },
+  { label: 'scanf("%d",&x);', langs: ["c"], text: 'scanf("%d", &);', cursor: -2 },
+  { label: "for loop", langs: ["c", "cpp"], text: "for (int i = 0; i < n; i++) {\n    \n}\n", cursor: -3 },
+  { label: "if/else", langs: ["c", "cpp"], text: "if () {\n    \n} else {\n    \n}\n", cursor: -19 },
+  { label: "while", langs: ["c", "cpp"], text: "while () {\n    \n}\n", cursor: -10 },
+  { label: "#include", langs: ["c", "cpp"], text: "#include <stdio.h>\n", cursor: 0 },
+  { label: "cout", langs: ["cpp"], text: 'cout << "" << endl;', cursor: -10 },
+  { label: "print()", langs: ["python"], text: 'print("")', cursor: -2 },
+  { label: "input()", langs: ["python"], text: 'name = input("Enter: ")', cursor: 0 },
+  { label: "for i in range", langs: ["python"], text: "for i in range(10):\n    ", cursor: 0 },
+];
 
 // ───── State ─────
 
@@ -111,6 +126,7 @@ function activateTab(id) {
   editor.setLanguage(tab.language);
   document.getElementById("language-select").value = tab.language;
   renderTabs();
+  renderSnippets();
   persist();
 }
 
@@ -184,19 +200,21 @@ async function runCode() {
   const tab = getActiveTab();
   tab.doc = editor.getDoc();
   persist();
+  editor.clearErrorLine();
   consoleIO.clear();
   consoleIO.resetInput();
-  setRunning(true);
+  setRunning(true, tab.language);
   try {
     await runProgram({
       language: tab.language,
       code: tab.doc,
       consoleIO,
+      onErrorLine: (lineNum) => editor.highlightErrorLine(lineNum),
     });
   } catch (err) {
     consoleIO.writeErr("\n" + ((err && err.message) || String(err)) + "\n");
   } finally {
-    setRunning(false);
+    setRunning(false, tab.language);
   }
 }
 
@@ -209,11 +227,16 @@ function stopCode() {
   setRunning(false);
 }
 
-function setRunning(running) {
+function setRunning(running, language) {
   const runBtn = document.getElementById("run-button");
   const stopBtn = document.getElementById("stop-button");
   runBtn.disabled = running;
-  stopBtn.disabled = !running;
+  runBtn.classList.toggle("is-busy", running);
+  // Stop button is only meaningful for async runners (currently Python).
+  // Hide it entirely for synchronous JSCPP-based runs to avoid confusion.
+  const showStop = ASYNC_LANGUAGES.has(language);
+  stopBtn.style.display = showStop ? "" : "none";
+  stopBtn.disabled = !running || !showStop;
 }
 
 // ───── Save / Open ─────
@@ -269,6 +292,84 @@ function renderExamples() {
   }
 }
 
+// Filter snippets to ones relevant for the current language and render in menu.
+function renderSnippets() {
+  const list = document.getElementById("snippets-list");
+  if (!list) return;
+  const lang = getActiveTab().language;
+  list.innerHTML = "";
+  for (const sn of SNIPPETS) {
+    if (!sn.langs.includes(lang)) continue;
+    const btn = document.createElement("button");
+    btn.className = "snippet";
+    btn.textContent = sn.label;
+    btn.addEventListener("click", () => {
+      editor.insertText(sn.text, sn.cursor || 0);
+      closeMenu();
+    });
+    list.appendChild(btn);
+  }
+}
+
+// One-tap symbol bar above the editor (mobile keyboard helper).
+function wireSymbolBar() {
+  const bar = document.getElementById("symbol-bar");
+  if (!bar) return;
+  bar.addEventListener("click", (e) => {
+    const btn = e.target.closest(".sym");
+    if (!btn) return;
+    e.preventDefault();
+    const insert = btn.dataset.insert;
+    const cursor = btn.dataset.cursor ? parseInt(btn.dataset.cursor, 10) : 0;
+    const key = btn.dataset.key;
+    if (key) {
+      editor.triggerKey(key);
+    } else if (typeof insert === "string") {
+      // The HTML data-insert "\\n" arrives literally as "\n" (two chars).
+      // Beginners almost certainly want a real newline escape *inside a string*,
+      // so we keep it as the two-character sequence — that's the right thing
+      // when typing inside a printf format string.
+      editor.insertText(insert, cursor);
+    }
+  });
+  // Keep editor focused so the on-screen keyboard stays open.
+  bar.addEventListener("mousedown", (e) => e.preventDefault());
+  bar.addEventListener("touchstart", (e) => {
+    // don't blur the editor
+  }, { passive: true });
+}
+
+// Quick Start modal
+function openQuickStart() {
+  document.getElementById("quickstart").hidden = false;
+  document.getElementById("quickstart-backdrop").hidden = false;
+}
+
+function closeQuickStart() {
+  document.getElementById("quickstart").hidden = true;
+  document.getElementById("quickstart-backdrop").hidden = true;
+  state.settings.seenOnboarding = true;
+  persist();
+}
+
+function maybeShowQuickStart() {
+  if (!state.settings.seenOnboarding) {
+    openQuickStart();
+  }
+}
+
+function resetToHelloWorld() {
+  const tab = getActiveTab();
+  tab.doc = DEFAULT_STATE.tabs[0].doc;
+  tab.language = "c";
+  if (!tab.name.endsWith(".c")) tab.name = "hello.c";
+  editor.setDoc(tab.doc);
+  editor.setLanguage("c");
+  document.getElementById("language-select").value = "c";
+  renderTabs();
+  persist();
+}
+
 // ───── Divider (resize) ─────
 
 function wireDivider() {
@@ -309,18 +410,7 @@ function wireDivider() {
   });
 }
 
-// ───── Onboarding ─────
-
-function maybeShowOnboarding() {
-  if (state.settings.seenOnboarding) return;
-  const el = document.getElementById("onboarding");
-  el.hidden = false;
-  document.getElementById("onboarding-dismiss").addEventListener("click", () => {
-    el.hidden = true;
-    state.settings.seenOnboarding = true;
-    persist();
-  });
-}
+// (Quick Start replaces the old toast — see openQuickStart / maybeShowQuickStart.)
 
 // ───── Service worker ─────
 
@@ -389,6 +479,7 @@ function init() {
     }
     editor.setLanguage(tab.language);
     renderTabs();
+    renderSnippets();
     persist();
   });
 
@@ -404,7 +495,19 @@ function init() {
       else if (action === "save") saveCurrent();
       else if (action === "rename") renameActive();
       else if (action === "close-tab") closeTab(state.activeTab);
+      else if (action === "reset-default") resetToHelloWorld();
+      else if (action === "show-help") openQuickStart();
     });
+  });
+
+  // Quick Start modal
+  document.getElementById("quickstart-close").addEventListener("click", closeQuickStart);
+  document.getElementById("quickstart-backdrop").addEventListener("click", closeQuickStart);
+  document.getElementById("quickstart-try").addEventListener("click", closeQuickStart);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !document.getElementById("quickstart").hidden) {
+      closeQuickStart();
+    }
   });
 
   document.getElementById("theme-select").addEventListener("change", (e) => {
@@ -425,8 +528,10 @@ function init() {
   });
 
   renderExamples();
+  renderSnippets();
+  wireSymbolBar();
   wireDivider();
-  maybeShowOnboarding();
+  maybeShowQuickStart();
   registerSW();
 
   // Keyboard shortcut: Ctrl/Cmd + Enter to run.

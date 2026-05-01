@@ -635,3 +635,209 @@ body {
 :root.theme-auto .cm-editor {
   background: var(--bg);
 }
+
+/* ========= Symbol bar (mobile keyboard helper) ========= */
+
+.symbol-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 6px 6px;
+  overflow-x: auto;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.symbol-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.symbol-bar .sym {
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 15px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.symbol-bar .sym:active {
+  background: var(--surface-2);
+  transform: translateY(1px);
+}
+
+.symbol-bar .sym-tab {
+  color: var(--accent);
+  font-size: 18px;
+  border-color: var(--accent);
+}
+
+/* ========= Stdin row label ========= */
+
+.stdin-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+/* ========= Modal (Quick Start) ========= */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 30;
+}
+
+.modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  z-index: 31;
+  overflow: hidden;
+}
+
+.modal[hidden],
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: 14px 18px;
+  overflow-y: auto;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.qs-lead {
+  margin: 0 0 12px;
+}
+
+.qs-steps {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.qs-steps li {
+  margin-bottom: 8px;
+}
+
+.qs-steps code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.qs-tip {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.modal-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ========= Snippets list (in menu) ========= */
+
+.snippets-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.snippets-list .snippet {
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.snippets-list .snippet:active {
+  background: var(--surface-2);
+}
+
+/* ========= Run-busy feedback ========= */
+
+.action-btn--primary.is-busy {
+  position: relative;
+  color: transparent;
+}
+
+.action-btn--primary.is-busy::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #11111b;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* CodeMirror 5 line highlight when an error is reported */
+.CodeMirror .CodeMirror-line.error-line,
+.CodeMirror .CodeMirror-linebackground.error-line {
+  background: rgba(243, 139, 168, 0.18);
+}
+
+.CodeMirror .CodeMirror-gutter-elt.error-gutter {
+  color: var(--danger);
+  font-weight: 700;
+}
