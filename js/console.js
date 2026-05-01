@@ -1,8 +1,21 @@
 // Output console: collects text, exposes a stdin buffer with promise-based reads.
 
-export function createConsole({ outputEl, stdinInputEl, stdinFormEl }) {
+export function createConsole({ outputEl, stdinInputEl, stdinFormEl, queueEl }) {
   let stdinBuffer = "";
   let stdinWaiters = [];
+
+  // Update the on-screen queue indicator (e.g. "📥 2 lines ready").
+  function updateQueueIndicator() {
+    if (!queueEl) return;
+    const lines = stdinBuffer.split("\n").filter((s) => s !== "").length;
+    if (lines === 0) {
+      queueEl.hidden = true;
+      queueEl.textContent = "";
+    } else {
+      queueEl.hidden = false;
+      queueEl.textContent = `📥 ${lines} input line${lines === 1 ? "" : "s"} ready — press ▶ Run`;
+    }
+  }
 
   function appendLine(text, cls) {
     const span = document.createElement("span");
@@ -32,10 +45,15 @@ export function createConsole({ outputEl, stdinInputEl, stdinFormEl }) {
   }
 
   function pushStdin(text) {
-    // append newline so gets() and scanf-like reads terminate lines.
-    stdinBuffer += text + "\n";
-    appendLine("» " + text + "\n", "line-input");
+    // Allow multi-line paste / typed multi-line via "\n" inside the value.
+    // Each non-empty submission becomes one or more lines in the buffer.
+    const lines = String(text).split(/\r?\n/);
+    for (const ln of lines) {
+      stdinBuffer += ln + "\n";
+      appendLine("» " + ln + "\n", "line-input");
+    }
     drainWaiters();
+    updateQueueIndicator();
   }
 
   function drainWaiters() {
@@ -46,20 +64,22 @@ export function createConsole({ outputEl, stdinInputEl, stdinFormEl }) {
   }
 
   function consumeStdin(count) {
+    let out;
     if (count == null) {
       // read one line
       const idx = stdinBuffer.indexOf("\n");
       if (idx < 0) {
-        const out = stdinBuffer;
+        out = stdinBuffer;
         stdinBuffer = "";
-        return out;
+      } else {
+        out = stdinBuffer.slice(0, idx);
+        stdinBuffer = stdinBuffer.slice(idx + 1);
       }
-      const out = stdinBuffer.slice(0, idx);
-      stdinBuffer = stdinBuffer.slice(idx + 1);
-      return out;
+    } else {
+      out = stdinBuffer.slice(0, count);
+      stdinBuffer = stdinBuffer.slice(count);
     }
-    const out = stdinBuffer.slice(0, count);
-    stdinBuffer = stdinBuffer.slice(count);
+    updateQueueIndicator();
     return out;
   }
 
@@ -88,6 +108,20 @@ export function createConsole({ outputEl, stdinInputEl, stdinFormEl }) {
   function resetInput() {
     stdinBuffer = "";
     cancelPendingReads();
+    updateQueueIndicator();
+  }
+
+  // Read the entire buffered input as a single string, drain it, return it.
+  // Used by synchronous runners (JSCPP) to feed scanf via initialStdin.
+  function drainBuffer() {
+    const out = stdinBuffer;
+    stdinBuffer = "";
+    updateQueueIndicator();
+    return out;
+  }
+
+  function bufferedLineCount() {
+    return stdinBuffer.split("\n").filter((s) => s !== "").length;
   }
 
   stdinFormEl.addEventListener("submit", (e) => {
@@ -109,5 +143,7 @@ export function createConsole({ outputEl, stdinInputEl, stdinFormEl }) {
     pushStdin,
     resetInput,
     cancelPendingReads,
+    drainBuffer,
+    bufferedLineCount,
   };
 }

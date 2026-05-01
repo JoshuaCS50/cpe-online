@@ -202,7 +202,10 @@ async function runCode() {
   persist();
   editor.clearErrorLine();
   consoleIO.clear();
-  consoleIO.resetInput();
+  // Cancel any *async* waiters from a previous Python run, but DO NOT wipe
+  // the stdin buffer — the user may have just typed input lines that they
+  // expect this run to consume.
+  consoleIO.cancelPendingReads();
   setRunning(true, tab.language);
   try {
     await runProgram({
@@ -215,6 +218,9 @@ async function runCode() {
     consoleIO.writeErr("\n" + ((err && err.message) || String(err)) + "\n");
   } finally {
     setRunning(false, tab.language);
+    // After the run, drop any input the program didn't consume so it doesn't
+    // leak into the next run.
+    consoleIO.resetInput();
   }
 }
 
@@ -444,6 +450,7 @@ function init() {
     outputEl: document.getElementById("output"),
     stdinInputEl: document.getElementById("stdin-input"),
     stdinFormEl: document.getElementById("stdin-form"),
+    queueEl: document.getElementById("stdin-queue"),
   });
 
   // Tabs

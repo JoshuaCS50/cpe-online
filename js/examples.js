@@ -24,7 +24,7 @@ int main() {
 int main() {
     char name[64];
     printf("What is your name? ");
-    scanf("%63s", name);
+    scanf("%s", name);
     printf("Hello, %s!\\n", name);
     return 0;
 }

@@ -142,15 +142,16 @@ export async function runC({ code, consoleIO, signal, onErrorLine }) {
     return { ok: false, exitCode: -1 };
   }
 
-  // Collect any pre-typed stdin so scripted programs work without interaction.
-  let pendingStdin = "";
+  // Drain anything the user has pre-typed in the stdin row. This is the
+  // primary input channel for synchronous JSCPP programs.
+  let initialStdin = consoleIO.drainBuffer();
 
-  // JSCPP stdin is provided synchronously via config.stdio.read / getInput.
-  // Because its run loop expects a string up-front, we support two modes:
-  //   1. Any input already pushed into the console buffer is consumed first.
-  //   2. If more input is needed mid-run, JSCPP will call getInput repeatedly;
-  //      we block the JS main thread briefly by returning buffered content or
-  //      an empty string (the interpreter tolerates eof).
+  // Mid-run fallback: if JSCPP exhausts the buffered input but the program
+  // keeps reading (scanf, gets, cin >>), pop a synchronous prompt() so the
+  // user can supply more input without aborting the run. This works on
+  // every desktop browser; on iOS Safari prompt() may be suppressed inside
+  // tight loops, in which case the runner gracefully returns "" (EOF).
+  let promptCount = 0;
   const config = {
     stdio: {
       write: (s) => {
@@ -160,33 +161,35 @@ export async function runC({ code, consoleIO, signal, onErrorLine }) {
     unsigned_overflow: "warn",
     maxTimeout: 30000,
     includes: {},
-    // Provide a synchronous input source. The user can pre-fill the stdin row;
-    // we bias toward non-blocking UX by returning "" when empty rather than
-    // freezing the tab.
     getInput: () => {
-      if (pendingStdin.length > 0) {
-        const out = pendingStdin;
-        pendingStdin = "";
-        return out;
+      // First, consume anything else the user typed in the stdin row before
+      // we got here (rare for sync runs, but possible).
+      const buffered = consoleIO.drainBuffer();
+      if (buffered) return buffered;
+
+      // Fall back to a blocking prompt(). Show the most recent line of
+      // output as the prompt label so the user sees what's being asked.
+      promptCount += 1;
+      let label = "Program is asking for input:";
+      if (promptCount > 20) {
+        // Safety: refuse to keep prompting forever in case of an infinite read.
+        return "";
       }
-      // Read whatever lines the user has typed so far.
-      let all = "";
-      let line = consoleIO.tryReadLineSync();
-      while (line !== null) {
-        all += line + "\n";
-        line = consoleIO.tryReadLineSync();
+      let answer = null;
+      try {
+        answer = window.prompt(label, "");
+      } catch (_) {
+        answer = null;
       }
-      return all;
+      if (answer == null) {
+        // User cancelled — feed EOF.
+        return "";
+      }
+      // Echo what the user typed into the output panel so it appears inline.
+      consoleIO.pushStdin(answer);
+      return consoleIO.drainBuffer();
     },
   };
-
-  // JSCPP v3 accepts pre-supplied stdin as the second argument.
-  let initialStdin = "";
-  let line = consoleIO.tryReadLineSync();
-  while (line !== null) {
-    initialStdin += line + "\n";
-    line = consoleIO.tryReadLineSync();
-  }
 
   try {
     const patched = escapeSpacesInStringLiterals(code);

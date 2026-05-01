@@ -66,9 +66,10 @@
         <button id="clear-output" class="text-button" aria-label="Clear output">Clear</button>
       </div>
       <pre id="output" class="output" aria-live="polite" aria-atomic="false"></pre>
+      <div id="stdin-queue" class="stdin-queue" hidden role="status" aria-live="polite"></div>
       <form id="stdin-form" class="stdin-row" autocomplete="off">
-        <label class="stdin-label" for="stdin-input" title="If your C program uses scanf, type the input here BEFORE pressing Run.">Input&nbsp;⮕</label>
-        <input id="stdin-input" class="stdin-input" type="text" inputmode="text" placeholder="Type any scanf input here, press Send (or Enter)…" />
+        <label class="stdin-label" for="stdin-input" title="If your C program uses scanf, type the input here BEFORE pressing Run. Multiple values? Separate them with new lines (paste them) or send several times.">Input&nbsp;⮕</label>
+        <input id="stdin-input" class="stdin-input" type="text" inputmode="text" placeholder="Type input here, press Send — then ▶ Run" />
         <button type="submit" class="text-button">Send</button>
       </form>
     </section>
@@ -165,6 +166,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="vendor/JSCPP.es5.min.js?v=2.0.6"></script>
-  <script type="module" src="js/app.js?v=5"></script>
+  <script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>

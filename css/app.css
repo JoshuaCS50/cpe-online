@@ -353,6 +353,20 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.stdin-queue {
+  padding: 6px 12px;
+  background: rgba(166, 227, 161, 0.12);
+  border-top: 1px solid var(--border);
+  color: var(--success);
+  font-size: 12px;
+  font-family: var(--mono);
+  text-align: center;
+}
+
+.stdin-queue[hidden] {
+  display: none;
+}
+
 .stdin-input {
   flex: 1;
   height: 36px;
