@@ -15,6 +15,7 @@ import {
   findCheatsheetSection,
   FORMAT_SPECIFIERS,
 } from "./cheatsheet.js";
+import { createZip } from "./zip.js";
 import {
   run as runProgram,
   ASYNC_LANGUAGES,
@@ -402,6 +403,48 @@ function saveCurrent() {
   draft.doc = editor.getDoc();
   downloadFile(draft.name, draft.doc);
   persist();
+}
+
+// Save EVERY draft into a single .zip and trigger one download.
+// Useful when a student wants to back up or hand in all their work at once.
+function saveAllDrafts() {
+  // Make sure the in-editor changes are reflected in the active draft first.
+  const active = getActiveDraft();
+  if (active) {
+    active.doc = editor.getDoc();
+    persist();
+  }
+
+  // De-duplicate filenames inside the archive so two drafts named "hello.c"
+  // don't collide (the second becomes "hello (2).c").
+  const seen = new Map();
+  const files = [];
+  for (const draft of state.drafts) {
+    let name = draft.name || "untitled.txt";
+    if (seen.has(name)) {
+      const n = seen.get(name) + 1;
+      seen.set(name, n);
+      const dot = name.lastIndexOf(".");
+      name =
+        dot > 0
+          ? name.slice(0, dot) + " (" + n + ")" + name.slice(dot)
+          : name + " (" + n + ")";
+    } else {
+      seen.set(name, 1);
+    }
+    files.push({ name, text: draft.doc || "" });
+  }
+
+  if (files.length === 0) {
+    alert("There are no drafts to save.");
+    return;
+  }
+
+  const blob = createZip(files);
+  // Filename includes today's date so multiple backups don't overwrite.
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `cpe-online-drafts-${stamp}.zip`;
+  downloadFile(filename, blob, "application/zip");
 }
 
 async function openFromDevice(fileList) {
@@ -912,6 +955,7 @@ function init() {
       if (action === "new") newDraft();
       else if (action === "open") document.getElementById("file-input").click();
       else if (action === "save") saveCurrent();
+      else if (action === "save-all") saveAllDrafts();
       else if (action === "rename") renameActive();
       else if (action === "close-tab") deleteDraft(state.activeDraft);
       else if (action === "reset-default") resetToHelloWorld();

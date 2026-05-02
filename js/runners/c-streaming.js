@@ -55,10 +55,8 @@ export async function runCStreaming({ code, consoleIO, onErrorLine }) {
       } else if (data.type === "error") {
         const { line, friendly } = explainJSCPPError(data.message);
         if (line && typeof onErrorLine === "function") onErrorLine(line);
-        const lineLabel = line ? `Line ${line}: ` : "";
-        consoleIO.writeErr(
-          "\n❌ " + lineLabel + (friendly || data.message) + "\n"
-        );
+        const where = line ? "Line " + line + " — " : "";
+        consoleIO.writeErr("\n❌ " + where + friendly + "\n");
         done({ ok: false, exitCode: -1 });
       }
     }
