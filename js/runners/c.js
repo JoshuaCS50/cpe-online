@@ -80,9 +80,68 @@ function escapeSpacesInStringLiterals(src) {
   return out;
 }
 
+// Pattern → plain-English explanations. Keep this list ordered most-specific
+// first so a generic rule (e.g. "Parsing Failure") doesn't shadow a precise
+// one (e.g. missing semicolon).
+//
+// Each entry is [regex, explanation-string-or-function]. Exported so the
+// streaming worker (runners/c-streaming.js) can use the same rule set.
+export const ERROR_RULES = [
+  // ── Phase 1 (already shipping) ──
+  [/missing declarator for argument/i,
+    "You have an empty argument list with `void` or stray text inside the parentheses. Try `int main()` instead of `int main(void)`."],
+  [/Expected\s+";"/i,
+    "You're missing a `;` at the end of the statement above the highlighted line. Almost every C statement ends with `;`."],
+  [/Expected\s+"\}"/i,
+    "You're missing a closing `}` for a block. Count your `{` and `}` — they must match exactly."],
+  [/Expected\s+"\)"/i,
+    "You're missing a closing `)`. Check the parentheses around your `if`, `for`, `while`, or function call."],
+  [/Expected\s+"\("/i,
+    "You're missing an opening `(`. Function calls and `if` / `for` / `while` always need `(...)`."],
+  // ── scanf / printf / format-specifier mistakes ──
+  [/no method scanf in global accepts/i,
+    "Wrong types passed to `scanf`. Remember the `&` — `scanf(\"%d\", &x);` not `scanf(\"%d\", x);`. The `&` means \"store the value in this address\"."],
+  [/no method printf in global accepts/i,
+    "Wrong types passed to `printf`. Match the format specifier to the variable: `%d` int, `%f` float, `%lf` (in scanf only) double, `%c` char, `%s` string."],
+  [/no method (\w+) in global accepts/i,
+    (m) => `\`${m[1]}\` was called with the wrong types. Check each argument: \`%d\` expects an int, \`%f\` a float, \`%s\` a char[].`],
+  // ── Header / include problems ──
+  [/cannot find library/i,
+    "That `#include` header isn't bundled in the in-browser interpreter. Supported: `stdio.h`, `stdlib.h`, `string.h`, `math.h`, `ctype.h`, `time.h` (and the C++ `cstdio` / `iostream` family)."],
+  [/(printf|scanf|puts|gets|fgets)\s+is\s+not\s+(declared|defined)/i,
+    (m) => `You used \`${m[1]}\` without including its header. Add \`#include <stdio.h>\` at the very top of your file.`],
+  [/(sqrt|pow|sin|cos|tan|fabs|log|log10|round|ceil|floor)\s+is\s+not\s+(declared|defined)/i,
+    (m) => `You used a math function (\`${m[1]}\`) without including its header. Add \`#include <math.h>\` at the very top of your file.`],
+  // ── Identifier / spelling ──
+  [/undefined reference|undeclared identifier|cannot resolve|is not declared/i,
+    "That name hasn't been declared. Check spelling, capitalisation, and that you have the right `#include` (`stdio.h` for printf, `math.h` for sqrt, etc.). Variables must be declared before use: `int x;` then `x = 5;`."],
+  // ── Type / assignment-vs-equality ──
+  [/assignment used as condition|assignment in condition/i,
+    "You probably typed `=` (assign) where you meant `==` (compare). Inside `if (...)` and `while (...)`, comparison is `==`."],
+  [/cannot convert|incompatible (type|types)|type mismatch/i,
+    "Type mismatch. Common cause: storing a `double` into an `int`, or passing the wrong format specifier (`%d` for a `double` should be `%lf`/`%f`)."],
+  // ── Function returns ──
+  [/control reaches end of non-void function|missing return statement/i,
+    "A non-`void` function has no `return` statement on this path. Add `return <value>;` (e.g. `return 0;` at the end of `main`)."],
+  // ── Runtime ──
+  [/memory overflow|invalid memory access|null pointer/i,
+    "Probably a missing `&` in `scanf`. Use `scanf(\"%d\", &x);` not `scanf(\"%d\", x);` — the `&` says \"store the value at this address\". Also possible: writing past the end of an array."],
+  [/division by zero/i,
+    "Division by zero. Add an `if` to check the divisor first."],
+  [/segmentation|out of bounds|index .* out of range|access violation/i,
+    "Out-of-bounds memory access. Most often: an array index past `size − 1` (arrays start at 0!), or a null pointer being dereferenced."],
+  [/timed? out|infinite loop/i,
+    "Your program ran too long — likely an infinite loop. Check that your `while` / `for` condition can become false."],
+  [/stack overflow|too much recursion/i,
+    "Stack overflow — usually unbounded recursion. Make sure your recursive function has a base case that returns."],
+  // ── Generic / parser ──
+  [/Parsing Failure/i,
+    "Syntax error. Look at the line shown — most often a missing `;`, mismatched braces, or a stray character."],
+];
+
 // Translate a raw JSCPP error into a beginner-friendly message + extract a line number.
 // Returns { line: number|null, friendly: string }.
-function explainJSCPPError(rawMsg) {
+export function explainJSCPPError(rawMsg) {
   const msg = String(rawMsg || "");
   // JSCPP errors usually start with "<line>:<col> ..." or include "line N".
   const colonMatch = msg.match(/^(\d+):(\d+)\s*(.*)/);
@@ -96,36 +155,14 @@ function explainJSCPPError(rawMsg) {
     if (lineWord) line = parseInt(lineWord[1], 10);
   }
 
-  // Pattern → plain-English explanations.
-  const rules = [
-    [/missing declarator for argument/i,
-      "You have an empty argument list with `void` or stray text inside the parentheses. Try `int main()` instead of `int main(void)` here."],
-    [/no method (\w+) in global accepts/i,
-      (m) => `\`${m[1]}\` was called with the wrong types. Check that each argument matches the function's expected types (e.g. \`%d\` needs an int, \`%s\` needs a char*).`],
-    [/cannot find library/i,
-      (m) => `That \`#include\` header isn't supported by the in-browser C interpreter. Supported headers: stdio.h, stdlib.h, string.h, math.h, ctype.h, time.h (and the C++ \`cstdio\` / \`iostream\` family).`],
-    [/Parsing Failure/i,
-      "There's a syntax error — check your braces, parentheses, and semicolons. Look at the line shown."],
-    [/Expected\s+";"/i,
-      "You're missing a `;` at the end of a statement."],
-    [/Expected\s+"\}"/i,
-      "You're missing a closing `}` for a block."],
-    [/Expected\s+"\)"/i,
-      "You're missing a closing `)` for a parenthesised expression or argument list."],
-    [/undefined reference|undeclared identifier|cannot resolve/i,
-      (m) => `An identifier hasn't been declared. Check spelling and that you've included the right header (\`#include <stdio.h>\` for printf, etc.).`],
-    [/division by zero/i, "You divided by zero at runtime."],
-    [/segmentation|out of bounds|access violation/i,
-      "Out-of-bounds memory access (likely a bad array index or a null pointer)."],
-    [/timed? out/i,
-      "Your program ran too long (possible infinite loop). The interpreter stopped it after 30 seconds."],
-  ];
-
-  for (const [re, expl] of rules) {
+  for (const [re, expl] of ERROR_RULES) {
     const m = body.match(re) || msg.match(re);
     if (m) {
       const explanation = typeof expl === "function" ? expl(m) : expl;
-      return { line, friendly: `${explanation}\n  → original: ${body.trim() || msg.trim()}` };
+      return {
+        line,
+        friendly: `${explanation}\n  → original: ${body.trim() || msg.trim()}`,
+      };
     }
   }
   return { line, friendly: body.trim() || msg.trim() };

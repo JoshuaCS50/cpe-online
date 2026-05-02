@@ -7,172 +7,311 @@ import {
   readFile,
   languageFromFilename,
   extensionForLanguage,
+  MAX_DRAFTS,
 } from "./storage.js";
 import { EXAMPLES, findExample } from "./examples.js";
-import { run as runProgram, ASYNC_LANGUAGES, STREAMABLE_LANGUAGES } from "./runners/index.js";
+import {
+  CHEATSHEET_SECTIONS,
+  findCheatsheetSection,
+  FORMAT_SPECIFIERS,
+} from "./cheatsheet.js";
+import {
+  run as runProgram,
+  ASYNC_LANGUAGES,
+  STREAMABLE_LANGUAGES,
+} from "./runners/index.js";
 
-// Common code snippets, language-aware. Each has { label, lang(s), text, cursor? }.
+// Common code snippets, language-aware. { label, langs, text, cursor? }.
+// CPE150S-flavoured comments come from the cheat-sheet PDF.
 const SNIPPETS = [
-  { label: "main", langs: ["c", "cpp"], text: 'int main() {\n    \n    return 0;\n}\n', cursor: -10 },
+  { label: "main", langs: ["c", "cpp"], text: '// step 1: toolbox\n#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n', cursor: -10 },
   { label: 'printf("");', langs: ["c", "cpp"], text: 'printf("");', cursor: -3 },
-  { label: 'scanf("%d",&x);', langs: ["c"], text: 'scanf("%d", &);', cursor: -2 },
+  { label: 'printf int', langs: ["c", "cpp"], text: 'printf("%d\\n", );', cursor: -3 },
+  { label: 'printf float', langs: ["c", "cpp"], text: 'printf("%.2f\\n", );', cursor: -3 },
+  { label: 'scanf int', langs: ["c"], text: 'scanf("%d", &);', cursor: -2 },
+  { label: 'scanf double', langs: ["c"], text: 'scanf("%lf", &);', cursor: -2 },
+  { label: 'scanf 2 ints', langs: ["c"], text: 'scanf("%d %d", &, &);', cursor: -8 },
   { label: "for loop", langs: ["c", "cpp"], text: "for (int i = 0; i < n; i++) {\n    \n}\n", cursor: -3 },
-  { label: "if/else", langs: ["c", "cpp"], text: "if () {\n    \n} else {\n    \n}\n", cursor: -19 },
   { label: "while", langs: ["c", "cpp"], text: "while () {\n    \n}\n", cursor: -10 },
+  { label: "do-while", langs: ["c", "cpp"], text: "do {\n    \n} while ();\n", cursor: -4 },
+  { label: "if/else", langs: ["c", "cpp"], text: "if () {\n    \n} else {\n    \n}\n", cursor: -19 },
+  { label: "ternary", langs: ["c", "cpp"], text: '/* hint: cond ? if-true : if-false */\nresult = (cond) ? a : b;\n', cursor: 0 },
+  { label: "switch", langs: ["c", "cpp"], text: "switch (x) {\n    case 1: break;\n    case 2: break;\n    default: break;\n}\n", cursor: 0 },
+  { label: "sum loop", langs: ["c", "cpp"], text: "// merry-go-round: add up n inputs\nint n, total = 0;\nscanf(\"%d\", &n);\nfor (int i = 0; i < n; i++) {\n    int x; scanf(\"%d\", &x);\n    total += x;\n}\nprintf(\"sum = %d\\n\", total);\n", cursor: 0 },
+  { label: "array average", langs: ["c", "cpp"], text: "int a[] = {3, 7, 2, 9};\nint n = sizeof(a) / sizeof(a[0]);\nint sum = 0;\nfor (int i = 0; i < n; i++) sum += a[i];\nfloat avg = (float) sum / n;  // cast keeps the decimals\nprintf(\"avg = %.2f\\n\", avg);\n", cursor: 0 },
   { label: "#include", langs: ["c", "cpp"], text: "#include <stdio.h>\n", cursor: 0 },
+  { label: "math.h", langs: ["c", "cpp"], text: "#include <math.h>\n// then use sqrt, pow, sin, cos, round\n", cursor: 0 },
   { label: "cout", langs: ["cpp"], text: 'cout << "" << endl;', cursor: -10 },
   { label: "print()", langs: ["python"], text: 'print("")', cursor: -2 },
   { label: "input()", langs: ["python"], text: 'name = input("Enter: ")', cursor: 0 },
   { label: "for i in range", langs: ["python"], text: "for i in range(10):\n    ", cursor: 0 },
 ];
 
-// ───── State ─────
+// ───── Default state ─────
+
+const DEFAULT_HELLO_DOC = `// CPE150S — C is like a recipe book. 4 steps:
+//   Step 1: pack toolbox       -> #include <stdio.h>
+//   Step 2: open the front door -> int main()
+//   Step 3: write the steps inside { ... }
+//   Step 4: close the door     -> return 0;
+
+#include <stdio.h>
+
+int main() {
+    printf("Hello, World!\\n");
+    return 0;
+}
+`;
 
 const DEFAULT_STATE = {
-  tabs: [
+  drafts: [
     {
-      id: "t1",
+      id: "d1",
       name: "hello.c",
       language: "c",
-      doc: `#include <stdio.h>\n\nint main() {\n    printf("Hello, World!\\n");\n    return 0;\n}\n`,
+      doc: DEFAULT_HELLO_DOC,
+      savedAt: Date.now(),
     },
   ],
-  activeTab: "t1",
+  activeDraft: "d1",
   settings: {
-    theme: "auto",
+    theme: "vscode",
     fontSize: 15,
     wrap: false,
     seenOnboarding: false,
     streamingMode: false,
+    dismissedInstallBanner: false,
   },
 };
 
 let state = loadState() || structuredClone(DEFAULT_STATE);
-// Heal state from older/partial saves.
-if (!state.tabs || state.tabs.length === 0) state = structuredClone(DEFAULT_STATE);
+// Heal state from older / partial saves and from v1 migration.
+if (!Array.isArray(state.drafts) || state.drafts.length === 0) {
+  // Migration safety: v1 used `tabs`. If we see them, port over.
+  if (Array.isArray(state.tabs) && state.tabs.length) {
+    state.drafts = state.tabs.map((t) => ({
+      id: t.id,
+      name: t.name,
+      language: t.language,
+      doc: t.doc,
+      savedAt: Date.now(),
+    }));
+    state.activeDraft = state.activeTab || state.drafts[0].id;
+    delete state.tabs;
+    delete state.activeTab;
+  } else {
+    state = structuredClone(DEFAULT_STATE);
+  }
+}
 if (!state.settings) state.settings = structuredClone(DEFAULT_STATE.settings);
-if (!state.tabs.some((t) => t.id === state.activeTab)) state.activeTab = state.tabs[0].id;
+// Backfill any new settings flags.
+for (const k of Object.keys(DEFAULT_STATE.settings)) {
+  if (state.settings[k] === undefined) state.settings[k] = DEFAULT_STATE.settings[k];
+}
+if (!state.drafts.some((d) => d.id === state.activeDraft)) {
+  state.activeDraft = state.drafts[0].id;
+}
 
 let editor;
 let consoleIO;
-let runAbort = null;
 let saveTimer = null;
+let deferredInstallPrompt = null;
 
 function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => saveState(state), 250);
 }
 
-function getActiveTab() {
-  return state.tabs.find((t) => t.id === state.activeTab);
+function getActiveDraft() {
+  return state.drafts.find((d) => d.id === state.activeDraft);
 }
 
-function newTabId() {
-  return "t" + Math.random().toString(36).slice(2, 8);
+function newDraftId() {
+  return "d" + Math.random().toString(36).slice(2, 8);
 }
 
 // ───── Theme & settings ─────
 
 function applySettings() {
   const root = document.documentElement;
-  root.classList.remove("theme-auto", "theme-dark", "theme-light");
+  root.classList.remove(
+    "theme-auto",
+    "theme-light",
+    "theme-vscode",
+    "theme-catppuccin"
+  );
   root.classList.add("theme-" + state.settings.theme);
   root.style.setProperty("--editor-fontsize", state.settings.fontSize + "px");
   if (editor) {
-    const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
+    const prefersLight =
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: light)").matches;
     const useLight =
       state.settings.theme === "light" ||
       (state.settings.theme === "auto" && prefersLight);
-    editor.setTheme(useLight ? "default" : "dracula");
+    // CodeMirror 5 themes: 'default' is light. Otherwise pick a matching dark.
+    let cmTheme;
+    if (useLight) cmTheme = "default";
+    else if (state.settings.theme === "catppuccin") cmTheme = "dracula";
+    else cmTheme = "dracula"; // best built-in approximation of VS Code Dark+
+    editor.setTheme(cmTheme);
   }
+  // Update the status-bar online pill colour because palette changed.
+  updateStatusBar();
 }
 
-// ───── Tabs ─────
+// ───── Drafts (formerly tabs) ─────
 
-function renderTabs() {
+function renderDraftTabs() {
   const tabsEl = document.getElementById("tabs");
   tabsEl.innerHTML = "";
-  for (const tab of state.tabs) {
+  for (const draft of state.drafts) {
     const el = document.createElement("div");
-    el.className = "tab" + (tab.id === state.activeTab ? " active" : "");
+    el.className = "tab" + (draft.id === state.activeDraft ? " active" : "");
     el.setAttribute("role", "tab");
-    el.setAttribute("aria-selected", tab.id === state.activeTab ? "true" : "false");
-    el.dataset.id = tab.id;
+    el.setAttribute(
+      "aria-selected",
+      draft.id === state.activeDraft ? "true" : "false"
+    );
+    el.dataset.id = draft.id;
 
     const nameEl = document.createElement("span");
     nameEl.className = "tab-name";
-    nameEl.textContent = tab.name;
+    nameEl.textContent = draft.name;
     el.appendChild(nameEl);
 
     const closeBtn = document.createElement("button");
     closeBtn.className = "tab-close";
-    closeBtn.setAttribute("aria-label", "Close " + tab.name);
+    closeBtn.setAttribute("aria-label", "Delete draft " + draft.name);
     closeBtn.textContent = "×";
     closeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      closeTab(tab.id);
+      deleteDraft(draft.id);
     });
     el.appendChild(closeBtn);
 
-    el.addEventListener("click", () => activateTab(tab.id));
+    el.addEventListener("click", () => activateDraft(draft.id));
     tabsEl.appendChild(el);
   }
 }
 
-function activateTab(id) {
-  const tab = state.tabs.find((t) => t.id === id);
-  if (!tab) return;
-  state.activeTab = id;
-  editor.setDoc(tab.doc);
-  editor.setLanguage(tab.language);
-  document.getElementById("language-select").value = tab.language;
-  renderTabs();
+function renderDraftsList() {
+  const list = document.getElementById("drafts-list");
+  if (!list) return;
+  list.innerHTML = "";
+  for (const draft of state.drafts) {
+    const row = document.createElement("div");
+    row.className =
+      "draft-row" + (draft.id === state.activeDraft ? " active" : "");
+
+    const open = document.createElement("button");
+    open.className = "draft-name";
+    open.textContent = draft.name;
+    open.title = "Open this draft";
+    open.addEventListener("click", () => {
+      activateDraft(draft.id);
+      closeMenu();
+    });
+    row.appendChild(open);
+
+    const meta = document.createElement("span");
+    meta.className = "draft-meta";
+    meta.textContent = (draft.language || "c").toUpperCase();
+    row.appendChild(meta);
+
+    const del = document.createElement("button");
+    del.className = "draft-delete";
+    del.title = "Delete this draft";
+    del.setAttribute("aria-label", "Delete draft " + draft.name);
+    del.textContent = "🗑";
+    del.addEventListener("click", () => {
+      if (state.drafts.length <= 1) {
+        deleteDraft(draft.id); // resets to a fresh blank
+      } else if (confirm("Delete draft \"" + draft.name + "\"?")) {
+        deleteDraft(draft.id);
+      }
+    });
+    row.appendChild(del);
+
+    list.appendChild(row);
+  }
+}
+
+function activateDraft(id) {
+  const draft = state.drafts.find((d) => d.id === id);
+  if (!draft) return;
+  state.activeDraft = id;
+  editor.setDoc(draft.doc);
+  editor.setLanguage(draft.language);
+  document.getElementById("language-select").value = draft.language;
+  renderDraftTabs();
+  renderDraftsList();
   renderSnippets();
   updateRunModeBadge();
+  updateStatusBar();
   persist();
 }
 
-function newTab({ name, language = "c", doc = "" } = {}) {
+function newDraft({ name, language = "c", doc = "" } = {}) {
+  if (state.drafts.length >= MAX_DRAFTS) {
+    alert(
+      "You already have " +
+        MAX_DRAFTS +
+        " drafts. Delete one before creating a new draft."
+    );
+    return;
+  }
   const n = name || suggestName(language);
-  const id = newTabId();
-  state.tabs.push({ id, name: n, language, doc });
-  state.activeTab = id;
-  renderTabs();
+  const id = newDraftId();
+  state.drafts.push({
+    id,
+    name: n,
+    language,
+    doc,
+    savedAt: Date.now(),
+  });
+  state.activeDraft = id;
+  renderDraftTabs();
+  renderDraftsList();
   editor.setDoc(doc);
   editor.setLanguage(language);
   document.getElementById("language-select").value = language;
+  updateStatusBar();
   persist();
 }
 
-function closeTab(id) {
-  const idx = state.tabs.findIndex((t) => t.id === id);
+function deleteDraft(id) {
+  const idx = state.drafts.findIndex((d) => d.id === id);
   if (idx < 0) return;
-  if (state.tabs.length === 1) {
-    // Last tab — reset it rather than leaving the app empty.
-    state.tabs[0] = {
-      id: newTabId(),
+  if (state.drafts.length === 1) {
+    // Last draft — reset rather than leave the app empty.
+    state.drafts[0] = {
+      id: newDraftId(),
       name: "untitled.c",
       language: "c",
       doc: "",
+      savedAt: Date.now(),
     };
-    state.activeTab = state.tabs[0].id;
+    state.activeDraft = state.drafts[0].id;
   } else {
-    state.tabs.splice(idx, 1);
-    if (state.activeTab === id) {
-      state.activeTab = state.tabs[Math.max(0, idx - 1)].id;
+    state.drafts.splice(idx, 1);
+    if (state.activeDraft === id) {
+      state.activeDraft = state.drafts[Math.max(0, idx - 1)].id;
     }
   }
-  const next = getActiveTab();
+  const next = getActiveDraft();
   editor.setDoc(next.doc);
   editor.setLanguage(next.language);
   document.getElementById("language-select").value = next.language;
-  renderTabs();
+  renderDraftTabs();
+  renderDraftsList();
+  updateStatusBar();
   persist();
 }
 
 function suggestName(language) {
   const ext = extensionForLanguage(language);
-  const existing = new Set(state.tabs.map((t) => t.name));
+  const existing = new Set(state.drafts.map((d) => d.name));
   let i = 1;
   let name = `untitled.${ext}`;
   while (existing.has(name)) {
@@ -183,38 +322,38 @@ function suggestName(language) {
 }
 
 function renameActive() {
-  const tab = getActiveTab();
-  const name = prompt("Rename file:", tab.name);
+  const draft = getActiveDraft();
+  const name = prompt("Rename draft:", draft.name);
   if (!name) return;
   const trimmed = name.trim();
   if (!trimmed) return;
-  tab.name = trimmed;
-  tab.language = languageFromFilename(trimmed);
-  document.getElementById("language-select").value = tab.language;
-  editor.setLanguage(tab.language);
-  renderTabs();
+  draft.name = trimmed;
+  draft.language = languageFromFilename(trimmed);
+  document.getElementById("language-select").value = draft.language;
+  editor.setLanguage(draft.language);
+  renderDraftTabs();
+  renderDraftsList();
+  updateStatusBar();
   persist();
 }
 
 // ───── Run / Stop ─────
 
 async function runCode() {
-  const tab = getActiveTab();
-  tab.doc = editor.getDoc();
+  const draft = getActiveDraft();
+  draft.doc = editor.getDoc();
   persist();
   editor.clearErrorLine();
   consoleIO.clear();
-  // Cancel any *async* waiters from a previous Python run, but DO NOT wipe
-  // the stdin buffer — the user may have just typed input lines that they
-  // expect this run to consume.
   consoleIO.cancelPendingReads();
-  setRunning(true, tab.language);
+  setRunning(true, draft.language);
   try {
     const useStreaming =
-      !!state.settings.streamingMode && STREAMABLE_LANGUAGES.has(tab.language);
+      !!state.settings.streamingMode &&
+      STREAMABLE_LANGUAGES.has(draft.language);
     await runProgram({
-      language: tab.language,
-      code: tab.doc,
+      language: draft.language,
+      code: draft.doc,
       consoleIO,
       streaming: useStreaming,
       onErrorLine: (lineNum) => editor.highlightErrorLine(lineNum),
@@ -222,17 +361,12 @@ async function runCode() {
   } catch (err) {
     consoleIO.writeErr("\n" + ((err && err.message) || String(err)) + "\n");
   } finally {
-    setRunning(false, tab.language);
-    // After the run, drop any input the program didn't consume so it doesn't
-    // leak into the next run.
+    setRunning(false, draft.language);
     consoleIO.resetInput();
   }
 }
 
 function stopCode() {
-  // JSCPP is synchronous so there's no clean mid-run abort for C/C++ beyond the
-  // interpreter's internal timeout. For Python, we drop the pending promise so
-  // the user can at least unfreeze the stdin row.
   consoleIO.cancelPendingReads(new Error("Stopped by user"));
   consoleIO.writeInfo("\n[stop requested]\n");
   setRunning(false);
@@ -243,8 +377,6 @@ function setRunning(running, language) {
   const stopBtn = document.getElementById("stop-button");
   runBtn.disabled = running;
   runBtn.classList.toggle("is-busy", running);
-  // Stop button is only meaningful for async runners (currently Python).
-  // Hide it entirely for synchronous JSCPP-based runs to avoid confusion.
   const showStop = ASYNC_LANGUAGES.has(language);
   stopBtn.style.display = showStop ? "" : "none";
   stopBtn.disabled = !running || !showStop;
@@ -253,12 +385,11 @@ function setRunning(running, language) {
 function updateRunModeBadge() {
   const badge = document.getElementById("run-mode-badge");
   if (!badge) return;
-  const lang = getActiveTab().language;
+  const lang = getActiveDraft().language;
   const streamable = STREAMABLE_LANGUAGES.has(lang);
   if (streamable && state.settings.streamingMode) {
     badge.hidden = false;
     badge.textContent = "live";
-    badge.title = "Streaming mode — output appears as printf fires (no mid-run prompts)";
   } else {
     badge.hidden = true;
   }
@@ -267,9 +398,9 @@ function updateRunModeBadge() {
 // ───── Save / Open ─────
 
 function saveCurrent() {
-  const tab = getActiveTab();
-  tab.doc = editor.getDoc();
-  downloadFile(tab.name, tab.doc);
+  const draft = getActiveDraft();
+  draft.doc = editor.getDoc();
+  downloadFile(draft.name, draft.doc);
   persist();
 }
 
@@ -278,7 +409,7 @@ async function openFromDevice(fileList) {
     try {
       const text = await readFile(file);
       const language = languageFromFilename(file.name);
-      newTab({ name: file.name, language, doc: text });
+      newDraft({ name: file.name, language, doc: text });
     } catch (err) {
       consoleIO.writeErr(`Could not open ${file.name}: ${err.message}\n`);
     }
@@ -292,6 +423,7 @@ function openMenu() {
   document.getElementById("menu-backdrop").hidden = false;
   document.getElementById("menu-button").setAttribute("aria-expanded", "true");
   document.getElementById("menu").setAttribute("aria-hidden", "false");
+  renderDraftsList();
 }
 
 function closeMenu() {
@@ -310,18 +442,17 @@ function renderExamples() {
     btn.dataset.id = ex.id;
     btn.innerHTML = `<span>${ex.name}</span><span class="tag">${ex.filename}</span>`;
     btn.addEventListener("click", () => {
-      newTab({ name: ex.filename, language: ex.lang, doc: ex.code });
+      newDraft({ name: ex.filename, language: ex.lang, doc: ex.code });
       closeMenu();
     });
     list.appendChild(btn);
   }
 }
 
-// Filter snippets to ones relevant for the current language and render in menu.
 function renderSnippets() {
   const list = document.getElementById("snippets-list");
   if (!list) return;
-  const lang = getActiveTab().language;
+  const lang = getActiveDraft().language;
   list.innerHTML = "";
   for (const sn of SNIPPETS) {
     if (!sn.langs.includes(lang)) continue;
@@ -340,31 +471,103 @@ function renderSnippets() {
 function wireSymbolBar() {
   const bar = document.getElementById("symbol-bar");
   if (!bar) return;
+
+  // Long-press tracking for the % button → format-specifier popover.
+  let longPressTimer = null;
+  let longPressFired = false;
+  let longPressTarget = null;
+
+  bar.addEventListener("pointerdown", (e) => {
+    const btn = e.target.closest(".sym-percent");
+    if (!btn) return;
+    longPressFired = false;
+    longPressTarget = btn;
+    longPressTimer = setTimeout(() => {
+      longPressFired = true;
+      openFormatPopover(btn);
+    }, 480);
+  });
+  function cancelLongPress() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+  bar.addEventListener("pointerup", cancelLongPress);
+  bar.addEventListener("pointerleave", cancelLongPress);
+  bar.addEventListener("pointercancel", cancelLongPress);
+
   bar.addEventListener("click", (e) => {
     const btn = e.target.closest(".sym");
     if (!btn) return;
     e.preventDefault();
+    if (longPressFired && btn === longPressTarget) {
+      // Suppress the click that follows a long-press.
+      longPressFired = false;
+      return;
+    }
     const insert = btn.dataset.insert;
     const cursor = btn.dataset.cursor ? parseInt(btn.dataset.cursor, 10) : 0;
     const key = btn.dataset.key;
     if (key) {
       editor.triggerKey(key);
     } else if (typeof insert === "string") {
-      // The HTML data-insert "\\n" arrives literally as "\n" (two chars).
-      // Beginners almost certainly want a real newline escape *inside a string*,
-      // so we keep it as the two-character sequence — that's the right thing
-      // when typing inside a printf format string.
       editor.insertText(insert, cursor);
     }
   });
-  // Keep editor focused so the on-screen keyboard stays open.
+
   bar.addEventListener("mousedown", (e) => e.preventDefault());
-  bar.addEventListener("touchstart", (e) => {
-    // don't blur the editor
-  }, { passive: true });
+  bar.addEventListener("touchstart", () => {}, { passive: true });
 }
 
-// Quick Start modal
+function openFormatPopover(anchor) {
+  const pop = document.getElementById("format-popover");
+  if (!pop) return;
+  pop.innerHTML = "";
+  for (const sp of FORMAT_SPECIFIERS) {
+    const row = document.createElement("button");
+    row.className = "fmt-row";
+    row.type = "button";
+    row.innerHTML =
+      '<span class="fmt-token">' +
+      sp.token.replace(/&/g, "&amp;").replace(/</g, "&lt;") +
+      '</span><span class="fmt-desc">' +
+      sp.desc +
+      "</span>";
+    row.addEventListener("click", () => {
+      editor.insertText(sp.token, 0);
+      closeFormatPopover();
+    });
+    pop.appendChild(row);
+  }
+  // Position above the anchor button.
+  const r = anchor.getBoundingClientRect();
+  const popWidth = 240;
+  let left = Math.max(8, Math.min(r.left, window.innerWidth - popWidth - 8));
+  let top = r.top - 8;
+  pop.style.left = left + "px";
+  pop.style.top = "auto";
+  pop.style.bottom = window.innerHeight - top + "px";
+  pop.hidden = false;
+  // Dismiss on next outside tap.
+  setTimeout(() => {
+    document.addEventListener("pointerdown", outsideCloseFormatPopover, {
+      once: true,
+    });
+  }, 0);
+}
+function outsideCloseFormatPopover(e) {
+  const pop = document.getElementById("format-popover");
+  if (!pop) return;
+  if (!pop.contains(e.target)) closeFormatPopover();
+}
+function closeFormatPopover() {
+  const pop = document.getElementById("format-popover");
+  if (pop) pop.hidden = true;
+}
+
+// ───── Quick Start ─────
+
 function openQuickStart() {
   document.getElementById("quickstart").hidden = false;
   document.getElementById("quickstart-backdrop").hidden = false;
@@ -378,40 +581,230 @@ function closeQuickStart() {
 }
 
 function maybeShowQuickStart() {
-  if (!state.settings.seenOnboarding) {
-    openQuickStart();
-  }
+  if (!state.settings.seenOnboarding) openQuickStart();
 }
 
 function resetToHelloWorld() {
-  const tab = getActiveTab();
-  tab.doc = DEFAULT_STATE.tabs[0].doc;
-  tab.language = "c";
-  if (!tab.name.endsWith(".c")) tab.name = "hello.c";
-  editor.setDoc(tab.doc);
+  const draft = getActiveDraft();
+  draft.doc = DEFAULT_HELLO_DOC;
+  draft.language = "c";
+  if (!draft.name.endsWith(".c")) draft.name = "hello.c";
+  editor.setDoc(draft.doc);
   editor.setLanguage("c");
   document.getElementById("language-select").value = "c";
-  renderTabs();
+  renderDraftTabs();
+  renderDraftsList();
+  updateStatusBar();
   persist();
 }
 
-// ───── Divider (resize) ─────
+// ───── Cheat sheet ─────
+
+let activeCheatSection = "format";
+
+function openCheatsheet() {
+  document.getElementById("cheatsheet").hidden = false;
+  document.getElementById("cheatsheet-backdrop").hidden = false;
+  renderCheatsheetTabs();
+  renderCheatsheetSection(activeCheatSection);
+}
+function closeCheatsheet() {
+  document.getElementById("cheatsheet").hidden = true;
+  document.getElementById("cheatsheet-backdrop").hidden = true;
+}
+function renderCheatsheetTabs() {
+  const nav = document.getElementById("cheatsheet-tabs");
+  nav.innerHTML = "";
+  for (const sec of CHEATSHEET_SECTIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cs-tab" + (sec.id === activeCheatSection ? " active" : "");
+    btn.textContent = sec.label;
+    btn.addEventListener("click", () => {
+      activeCheatSection = sec.id;
+      renderCheatsheetTabs();
+      renderCheatsheetSection(sec.id);
+    });
+    nav.appendChild(btn);
+  }
+}
+function renderCheatsheetSection(id) {
+  const sec = findCheatsheetSection(id);
+  const content = document.getElementById("cheatsheet-content");
+  if (!content) return;
+  content.innerHTML = sec ? sec.html : "<p>Section not found.</p>";
+  content.scrollTop = 0;
+}
+
+// ───── Copy output ─────
+
+async function copyOutput() {
+  const txt = document.getElementById("output").textContent || "";
+  if (!txt) {
+    showCopyToast("Output is empty");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(txt);
+    showCopyToast("Copied!");
+  } catch (_) {
+    // Fallback: hidden textarea + execCommand
+    const ta = document.createElement("textarea");
+    ta.value = txt;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (_) {}
+    ta.remove();
+    showCopyToast(ok ? "Copied!" : "Copy failed");
+  }
+}
+
+let copyToastTimer = null;
+function showCopyToast(msg) {
+  const el = document.getElementById("copy-toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(copyToastTimer);
+  copyToastTimer = setTimeout(() => { el.hidden = true; }, 1500);
+}
+
+// ───── Install banner (PWA) ─────
+
+function isStandalone() {
+  return (
+    (window.matchMedia &&
+      window.matchMedia("(display-mode: standalone)").matches) ||
+    window.navigator.standalone === true
+  );
+}
+
+function isIOS() {
+  return /iPhone|iPad|iPod/.test(window.navigator.userAgent);
+}
+
+function showInstallBanner({ ios = false } = {}) {
+  const banner = document.getElementById("install-banner");
+  const action = document.getElementById("install-banner-action");
+  const instr = document.getElementById("install-banner-instructions");
+  if (!banner) return;
+  if (ios) {
+    instr.textContent =
+      "iPhone / iPad: tap Share ⤴ → 'Add to Home Screen'.";
+    action.textContent = "Got it";
+    action.onclick = () => dismissInstallBanner();
+  } else {
+    instr.textContent =
+      "No laptop needed — installs as an app, works offline.";
+    action.textContent = "Install";
+    action.onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      try { await deferredInstallPrompt.userChoice; } catch (_) {}
+      deferredInstallPrompt = null;
+      dismissInstallBanner();
+    };
+  }
+  banner.hidden = false;
+}
+
+function dismissInstallBanner() {
+  const banner = document.getElementById("install-banner");
+  if (banner) banner.hidden = true;
+  state.settings.dismissedInstallBanner = true;
+  persist();
+}
+
+function wireInstallBanner() {
+  if (state.settings.dismissedInstallBanner) return;
+  if (isStandalone()) return; // already installed
+
+  // Android / Chrome: capture beforeinstallprompt and surface it.
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showInstallBanner({ ios: false });
+  });
+
+  // iOS Safari: no event — show static instructions on phones.
+  if (isIOS() && !isStandalone()) {
+    // Defer slightly so the page paints first.
+    setTimeout(() => showInstallBanner({ ios: true }), 800);
+  }
+
+  document
+    .getElementById("install-banner-dismiss")
+    .addEventListener("click", dismissInstallBanner);
+}
+
+// ───── Status bar (Phase 3.15) + offline state (Phase 2.11) ─────
+
+function updateStatusBar() {
+  const draft = getActiveDraft();
+  const langPill = document.getElementById("status-language");
+  if (langPill) langPill.textContent = (draft.language || "c").toUpperCase();
+  const cursorPill = document.getElementById("status-cursor");
+  if (cursorPill && editor && editor.cm) {
+    const c = editor.cm.getCursor();
+    cursorPill.textContent = "Ln " + (c.line + 1) + ", Col " + (c.ch + 1);
+  }
+  const onlinePill = document.getElementById("status-online");
+  const badge = document.getElementById("offline-badge");
+  if (onlinePill) {
+    if (navigator.onLine === false) {
+      onlinePill.textContent = "● offline";
+      onlinePill.classList.remove("status-pill--ok");
+      onlinePill.classList.add("status-pill--err");
+    } else {
+      onlinePill.textContent = "● online";
+      onlinePill.classList.remove("status-pill--err");
+      onlinePill.classList.add("status-pill--ok");
+    }
+  }
+  if (badge) {
+    badge.hidden = navigator.onLine !== false;
+  }
+}
+
+function wireOnlineOffline() {
+  window.addEventListener("online", () => updateStatusBar());
+  window.addEventListener("offline", () => updateStatusBar());
+}
+
+// ───── Divider ─────
 
 function wireDivider() {
   const divider = document.getElementById("divider");
   const workspace = document.getElementById("workspace");
   let dragging = false;
 
-  const getMode = () => (window.matchMedia("(min-width: 820px)").matches ? "col" : "row");
+  const isLandscapeSplit = () =>
+    window.matchMedia(
+      "(orientation: landscape) and (min-width: 640px) and (max-width: 1023px)"
+    ).matches;
+  const getMode = () =>
+    window.matchMedia("(min-width: 820px)").matches || isLandscapeSplit()
+      ? "col"
+      : "row";
 
   function onMove(clientX, clientY) {
     if (!dragging) return;
     const rect = workspace.getBoundingClientRect();
     if (getMode() === "col") {
-      const right = Math.max(220, Math.min(rect.width - 240, rect.right - clientX));
+      const right = Math.max(
+        220,
+        Math.min(rect.width - 240, rect.right - clientX)
+      );
       workspace.style.gridTemplateColumns = `1fr 6px ${right}px`;
     } else {
-      const bottom = Math.max(120, Math.min(rect.height - 180, rect.bottom - clientY));
+      const bottom = Math.max(
+        120,
+        Math.min(rect.height - 180, rect.bottom - clientY)
+      );
       workspace.style.gridTemplateRows = `1fr 6px ${bottom}px`;
     }
   }
@@ -429,19 +822,15 @@ function wireDivider() {
   divider.addEventListener("pointercancel", () => { dragging = false; });
 
   window.addEventListener("resize", () => {
-    // Reset inline styles when crossing breakpoints to avoid a stuck size.
     workspace.style.gridTemplateColumns = "";
     workspace.style.gridTemplateRows = "";
   });
 }
 
-// (Quick Start replaces the old toast — see openQuickStart / maybeShowQuickStart.)
-
 // ───── Service worker ─────
 
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
-  // Only register when served over http(s); file:// won't work.
   if (location.protocol !== "http:" && location.protocol !== "https:") return;
   navigator.serviceWorker.register("sw.js").catch((err) => {
     console.warn("SW registration failed:", err);
@@ -451,20 +840,24 @@ function registerSW() {
 // ───── Init ─────
 
 function init() {
-  // Editor
   editor = createEditor(document.getElementById("editor"), {
-    initialDoc: getActiveTab().doc,
-    language: getActiveTab().language,
+    initialDoc: getActiveDraft().doc,
+    language: getActiveDraft().language,
     wrap: state.settings.wrap,
     fontSize: state.settings.fontSize,
     onChange: (doc) => {
-      const tab = getActiveTab();
-      tab.doc = doc;
+      const d = getActiveDraft();
+      d.doc = doc;
+      d.savedAt = Date.now();
       persist();
     },
   });
 
-  // Console
+  // Cursor → status bar
+  if (editor.cm) {
+    editor.cm.on("cursorActivity", () => updateStatusBar());
+  }
+
   consoleIO = createConsole({
     outputEl: document.getElementById("output"),
     stdinInputEl: document.getElementById("stdin-input"),
@@ -472,18 +865,15 @@ function init() {
     queueEl: document.getElementById("stdin-queue"),
   });
 
-  // Tabs
-  renderTabs();
-  document.getElementById("language-select").value = getActiveTab().language;
+  renderDraftTabs();
+  document.getElementById("language-select").value = getActiveDraft().language;
 
-  // Settings UI
   applySettings();
   document.getElementById("theme-select").value = state.settings.theme;
   document.getElementById("font-size").value = state.settings.fontSize;
   document.getElementById("line-wrap").checked = state.settings.wrap;
   document.getElementById("streaming-mode").checked = !!state.settings.streamingMode;
 
-  // Wire controls
   document.getElementById("run-button").addEventListener("click", runCode);
   document.getElementById("stop-button").addEventListener("click", stopCode);
   document.getElementById("save-button").addEventListener("click", saveCurrent);
@@ -495,19 +885,20 @@ function init() {
     e.target.value = "";
   });
   document.getElementById("clear-output").addEventListener("click", () => consoleIO.clear());
-  document.getElementById("new-tab").addEventListener("click", () => newTab());
+  document.getElementById("copy-output").addEventListener("click", copyOutput);
+  document.getElementById("new-tab").addEventListener("click", () => newDraft());
 
   document.getElementById("language-select").addEventListener("change", (e) => {
-    const tab = getActiveTab();
-    tab.language = e.target.value;
-    // If filename extension doesn't match, update it only when file is untouched ("untitled").
-    if (tab.name.startsWith("untitled")) {
-      tab.name = `untitled.${extensionForLanguage(tab.language)}`;
+    const draft = getActiveDraft();
+    draft.language = e.target.value;
+    if (draft.name.startsWith("untitled")) {
+      draft.name = `untitled.${extensionForLanguage(draft.language)}`;
     }
-    editor.setLanguage(tab.language);
-    renderTabs();
+    editor.setLanguage(draft.language);
+    renderDraftTabs();
     renderSnippets();
     updateRunModeBadge();
+    updateStatusBar();
     persist();
   });
 
@@ -518,23 +909,30 @@ function init() {
     btn.addEventListener("click", () => {
       const action = btn.dataset.action;
       closeMenu();
-      if (action === "new") newTab();
+      if (action === "new") newDraft();
       else if (action === "open") document.getElementById("file-input").click();
       else if (action === "save") saveCurrent();
       else if (action === "rename") renameActive();
-      else if (action === "close-tab") closeTab(state.activeTab);
+      else if (action === "close-tab") deleteDraft(state.activeDraft);
       else if (action === "reset-default") resetToHelloWorld();
       else if (action === "show-help") openQuickStart();
     });
   });
+
+  // Cheat sheet
+  document.getElementById("cheatsheet-button").addEventListener("click", openCheatsheet);
+  document.getElementById("cheatsheet-close").addEventListener("click", closeCheatsheet);
+  document.getElementById("cheatsheet-backdrop").addEventListener("click", closeCheatsheet);
 
   // Quick Start modal
   document.getElementById("quickstart-close").addEventListener("click", closeQuickStart);
   document.getElementById("quickstart-backdrop").addEventListener("click", closeQuickStart);
   document.getElementById("quickstart-try").addEventListener("click", closeQuickStart);
   window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !document.getElementById("quickstart").hidden) {
-      closeQuickStart();
+    if (e.key === "Escape") {
+      if (!document.getElementById("quickstart").hidden) closeQuickStart();
+      if (!document.getElementById("cheatsheet").hidden) closeCheatsheet();
+      if (!document.getElementById("format-popover").hidden) closeFormatPopover();
     }
   });
 
@@ -560,7 +958,7 @@ function init() {
     persist();
   });
 
-  // Inputs panel — multi-line, paste all values, queue at once.
+  // Inputs panel
   document.getElementById("inputs-queue").addEventListener("click", () => {
     const ta = document.getElementById("inputs-textarea");
     const text = (ta.value || "").trim();
@@ -576,13 +974,16 @@ function init() {
 
   renderExamples();
   renderSnippets();
+  renderDraftsList();
   wireSymbolBar();
   wireDivider();
+  wireInstallBanner();
+  wireOnlineOffline();
   updateRunModeBadge();
+  updateStatusBar();
   maybeShowQuickStart();
   registerSW();
 
-  // Keyboard shortcut: Ctrl/Cmd + Enter to run.
   window.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();

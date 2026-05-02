@@ -2,7 +2,7 @@
 // Precaches the app shell and caches third-party libraries on first use so the
 // app works fully offline after the first successful load.
 
-const VERSION = "cpe-online-v4";
+const VERSION = "cpe-online-v5";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -16,6 +16,7 @@ const SHELL_ASSETS = [
   "./js/console.js",
   "./js/storage.js",
   "./js/examples.js",
+  "./js/cheatsheet.js",
   "./js/runners/index.js",
   "./js/runners/c.js",
   "./js/runners/c-streaming.js",

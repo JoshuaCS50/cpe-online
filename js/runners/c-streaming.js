@@ -1,6 +1,8 @@
 // Main-thread wrapper around the c-worker. Returns once the worker reports
 // done or error. Output streams via consoleIO.write as it arrives.
 
+import { explainJSCPPError } from "./c.js";
+
 let cachedWorker = null;
 let cachedWorkerBusy = false;
 
@@ -23,21 +25,7 @@ export function terminateStreamingWorker() {
   }
 }
 
-// Translate raw error strings the same way the sync runner does.
-function explainJSCPPError(rawMsg) {
-  const msg = String(rawMsg || "");
-  const colonMatch = msg.match(/^(\d+):(\d+)\s*(.*)/);
-  let line = null;
-  let body = msg;
-  if (colonMatch) {
-    line = parseInt(colonMatch[1], 10);
-    body = colonMatch[3];
-  } else {
-    const lineWord = msg.match(/line\s+(\d+)/i);
-    if (lineWord) line = parseInt(lineWord[1], 10);
-  }
-  return { line, body };
-}
+// Error explanation is shared with the sync runner via runners/c.js.
 
 export async function runCStreaming({ code, consoleIO, onErrorLine }) {
   const worker = getWorker();
@@ -65,10 +53,12 @@ export async function runCStreaming({ code, consoleIO, onErrorLine }) {
         consoleIO.writeInfo(`\n[program exited with code ${data.exitCode}]\n`);
         done({ ok: data.exitCode === 0, exitCode: data.exitCode });
       } else if (data.type === "error") {
-        const { line, body } = explainJSCPPError(data.message);
+        const { line, friendly } = explainJSCPPError(data.message);
         if (line && typeof onErrorLine === "function") onErrorLine(line);
         const lineLabel = line ? `Line ${line}: ` : "";
-        consoleIO.writeErr("\n❌ " + lineLabel + (body || data.message) + "\n");
+        consoleIO.writeErr(
+          "\n❌ " + lineLabel + (friendly || data.message) + "\n"
+        );
         done({ ok: false, exitCode: -1 });
       }
     }

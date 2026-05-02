@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#1e1e2e" />
+  <meta name="theme-color" content="#1E1E1E" />
   <meta name="description" content="CPE Online — a mobile-friendly web IDE for C, C++, Python, and Java. Runs fully offline in your browser after the first visit." />
   <title>CPE Online — Mobile C/C++ IDE</title>
   <link rel="manifest" href="manifest.webmanifest" />
@@ -19,6 +19,7 @@
       <span class="brand-name">CPE Online</span>
     </div>
     <div class="top-bar-right">
+      <span id="offline-badge" class="offline-badge" hidden role="status" aria-live="polite" title="Network status">●&nbsp;offline</span>
       <label class="lang-picker">
         <span class="sr-only">Language</span>
         <select id="language-select" aria-label="Select language">
@@ -28,14 +29,26 @@
           <option value="java">Java (preview)</option>
         </select>
       </label>
+      <button id="cheatsheet-button" class="icon-button" aria-label="Open CPE150S cheat sheet" title="Open cheat sheet (format specifiers, math.h, MATLAB↔C, …)">📖</button>
       <button id="menu-button" class="icon-button" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">☰</button>
     </div>
   </header>
 
-  <nav class="tabs-bar" aria-label="Open files">
-    <div id="tabs" class="tabs" role="tablist"></div>
-    <button id="new-tab" class="icon-button tab-add" aria-label="New file">＋</button>
+  <nav class="tabs-bar" aria-label="Open drafts">
+    <div id="tabs" class="tabs" role="tablist" aria-label="Drafts"></div>
+    <button id="new-tab" class="icon-button tab-add" aria-label="New draft">＋</button>
   </nav>
+
+  <!-- PWA install banner (Phase 1.3): shown on first eligible visit, dismissible. -->
+  <div id="install-banner" class="install-banner" hidden role="region" aria-label="Install CPE Online">
+    <span class="install-banner-icon" aria-hidden="true">📲</span>
+    <div class="install-banner-text">
+      <strong>Install CPE Online as an app</strong>
+      <span id="install-banner-instructions" class="install-banner-instructions">No laptop needed — works offline once installed.</span>
+    </div>
+    <button id="install-banner-action" class="action-btn action-btn--primary" type="button">Install</button>
+    <button id="install-banner-dismiss" class="icon-button" aria-label="Dismiss install banner" type="button">✕</button>
+  </div>
 
   <main class="workspace" id="workspace">
     <section class="editor-pane" aria-label="Code editor">
@@ -51,10 +64,22 @@
         <button class="sym" data-insert="&amp;" aria-label="Insert ampersand">&amp;</button>
         <button class="sym" data-insert="*" aria-label="Insert asterisk">*</button>
         <button class="sym" data-insert="=" aria-label="Insert equals">=</button>
+        <button class="sym" data-insert="==" aria-label="Insert equality">==</button>
+        <button class="sym" data-insert="!" aria-label="Insert logical not">!</button>
+        <button class="sym" data-insert="!=" aria-label="Insert not equal">!=</button>
+        <button class="sym" data-insert="&amp;&amp;" aria-label="Insert logical AND">&amp;&amp;</button>
+        <button class="sym" data-insert="||" aria-label="Insert logical OR">||</button>
+        <button class="sym" data-insert="|" aria-label="Insert pipe">|</button>
+        <button class="sym sym-percent" data-insert="%" aria-label="Insert percent (long-press for format specifier list)" title="Long-press for format specifier list (%d, %f, %s, …)">%</button>
+        <button class="sym" data-insert="++" aria-label="Insert increment">++</button>
+        <button class="sym" data-insert="--" aria-label="Insert decrement">--</button>
+        <button class="sym" data-insert=" ? : " data-cursor="-3" aria-label="Insert ternary operator">?:</button>
         <button class="sym" data-insert="-&gt;" aria-label="Insert arrow">-&gt;</button>
         <button class="sym" data-insert="\\n" aria-label="Insert newline escape">\n</button>
         <button class="sym sym-tab" data-key="Tab" aria-label="Indent">⇥</button>
       </div>
+      <!-- Long-press popover for format specifiers (Phase 3.13) -->
+      <div id="format-popover" class="format-popover" hidden role="menu" aria-label="Format specifier"></div>
       <div id="editor" class="editor" role="textbox" aria-multiline="true" aria-label="Source code"></div>
     </section>
 
@@ -63,7 +88,10 @@
     <section class="output-pane" aria-label="Program output">
       <div class="output-header">
         <span>Output</span>
-        <button id="clear-output" class="text-button" aria-label="Clear output">Clear</button>
+        <div class="output-header-actions">
+          <button id="copy-output" class="text-button" aria-label="Copy output to clipboard" title="Copy the entire output to your clipboard so you can paste it into a chat or assignment.">📋 Copy</button>
+          <button id="clear-output" class="text-button" aria-label="Clear output">Clear</button>
+        </div>
       </div>
       <pre id="output" class="output" aria-live="polite" aria-atomic="false"></pre>
       <div id="stdin-queue" class="stdin-queue" hidden role="status" aria-live="polite"></div>
@@ -76,10 +104,10 @@
   </main>
 
   <footer class="action-bar" role="toolbar" aria-label="Main actions">
-    <button id="run-button" class="action-btn action-btn--primary" title="Run the current file. Toggle 'Stream output (live)' in the menu for live output, or leave it off for interactive scanf prompts.">
+    <button id="run-button" class="action-btn action-btn--primary" aria-label="Run program" title="Run the current file. Toggle 'Stream output (live)' in the menu for live output, or leave it off for interactive scanf prompts.">
       <span aria-hidden="true">▶</span> Run<span id="run-mode-badge" class="run-mode-badge" hidden></span>
     </button>
-    <button id="stop-button" class="action-btn" disabled>
+    <button id="stop-button" class="action-btn" aria-label="Stop running program" disabled>
       <span aria-hidden="true">■</span> Stop
     </button>
     <button id="save-button" class="action-btn" aria-label="Save current file to device">
@@ -99,13 +127,18 @@
       <button id="menu-close" class="icon-button" aria-label="Close menu">✕</button>
     </div>
     <div class="menu-section">
-      <button class="menu-item" data-action="new">New file</button>
-      <button class="menu-item" data-action="open">Open file…</button>
-      <button class="menu-item" data-action="save">Save as…</button>
-      <button class="menu-item" data-action="rename">Rename current tab…</button>
-      <button class="menu-item" data-action="close-tab">Close current tab</button>
+      <button class="menu-item" data-action="new">New draft</button>
+      <button class="menu-item" data-action="open">Open file from device…</button>
+      <button class="menu-item" data-action="save">Save current draft to device…</button>
+      <button class="menu-item" data-action="rename">Rename current draft…</button>
+      <button class="menu-item" data-action="close-tab">Delete current draft</button>
       <button class="menu-item" data-action="reset-default">Reset to Hello World</button>
       <button class="menu-item" data-action="show-help">How to use ▶ Quick start</button>
+    </div>
+    <div class="menu-section">
+      <div class="menu-heading">My drafts</div>
+      <p class="menu-hint">All drafts auto-save to this device. Up to 8 named drafts.</p>
+      <div id="drafts-list" class="drafts-list"></div>
     </div>
     <div class="menu-section">
       <div class="menu-heading">Inputs (one per line)</div>
@@ -129,8 +162,9 @@
       <label class="menu-field">
         Theme
         <select id="theme-select">
-          <option value="auto">Auto</option>
-          <option value="dark">Dark</option>
+          <option value="vscode">VS Code Dark+</option>
+          <option value="catppuccin">Catppuccin Mocha</option>
+          <option value="auto">Auto (match system)</option>
           <option value="light">Light</option>
         </select>
       </label>
@@ -148,9 +182,35 @@
       </label>
     </div>
     <div class="menu-footer">
-      <span class="version">CPE Online v1.0</span>
+      <span class="version">CPE Online v2.0 — built for CPE150S</span>
     </div>
   </aside>
+
+  <!-- Cheat sheet panel (Phase 2.7) -->
+  <div id="cheatsheet-backdrop" class="menu-backdrop" hidden></div>
+  <aside id="cheatsheet" class="cheatsheet" hidden aria-hidden="true" aria-label="CPE150S cheat sheet">
+    <div class="menu-header">
+      <span>📖 CPE150S Cheat Sheet</span>
+      <button id="cheatsheet-close" class="icon-button" aria-label="Close cheat sheet">✕</button>
+    </div>
+    <nav class="cheatsheet-tabs" role="tablist" id="cheatsheet-tabs"></nav>
+    <div id="cheatsheet-content" class="cheatsheet-content"></div>
+    <div class="menu-footer">
+      <span>Works offline · Source: CPE150S cheat-sheet PDF</span>
+    </div>
+  </aside>
+
+  <!-- Status bar (Phase 3.15) -->
+  <div id="status-bar" class="status-bar" role="status" aria-live="polite">
+    <span id="status-language" class="status-pill">C</span>
+    <span id="status-cursor" class="status-pill">Ln 1, Col 1</span>
+    <span id="status-online" class="status-pill status-pill--ok">● online</span>
+    <span class="status-spacer"></span>
+    <span class="status-pill status-pill--brand">CPE Online</span>
+  </div>
+
+  <!-- Copy-output toast -->
+  <div id="copy-toast" class="copy-toast" hidden role="status" aria-live="polite">Copied!</div>
 
   <!-- Quick Start modal — shown on first visit and from the menu -->
   <div id="quickstart-backdrop" class="modal-backdrop" hidden></div>
@@ -179,6 +239,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="vendor/JSCPP.es5.min.js?v=2.0.6"></script>
-  <script type="module" src="js/app.js?v=7"></script>
+  <script type="module" src="js/app.js?v=8"></script>
 </body>
 </html>

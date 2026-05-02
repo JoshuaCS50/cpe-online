@@ -17,11 +17,52 @@ export function createConsole({ outputEl, stdinInputEl, stdinFormEl, queueEl }) 
     }
   }
 
+  // Auto-fold older lines once the output grows past MAX_VISIBLE child nodes
+  // so phones don't have to scroll through 500 spans. The most recent
+  // KEEP_RECENT spans stay visible; everything older collapses into a
+  // <details> block the user can re-expand.
+  const MAX_VISIBLE = 200;
+  const KEEP_RECENT = 100;
+
+  function maybeFoldOldOutput() {
+    const childCount = outputEl.childNodes.length;
+    if (childCount <= MAX_VISIBLE) return;
+
+    // If there's already an active fold at the top, push more into it.
+    let fold = outputEl.firstElementChild;
+    if (!(fold && fold.tagName === "DETAILS" && fold.classList.contains("output-fold"))) {
+      fold = document.createElement("details");
+      fold.className = "output-fold";
+      const summary = document.createElement("summary");
+      summary.textContent = "Show earlier output";
+      fold.appendChild(summary);
+      const content = document.createElement("span");
+      content.className = "fold-content";
+      fold.appendChild(content);
+      outputEl.insertBefore(fold, outputEl.firstChild);
+    }
+    const summary = fold.querySelector("summary");
+    const foldContent = fold.querySelector(".fold-content");
+
+    // Move spans (everything between the fold and the last KEEP_RECENT) into the fold.
+    while (
+      outputEl.childNodes.length > KEEP_RECENT + 1 &&
+      outputEl.lastChild !== fold
+    ) {
+      const second = fold.nextSibling;
+      if (!second) break;
+      foldContent.appendChild(second);
+    }
+    const hidden = foldContent.childNodes.length;
+    summary.textContent = `Show earlier output (${hidden} line${hidden === 1 ? "" : "s"})`;
+  }
+
   function appendLine(text, cls) {
     const span = document.createElement("span");
     if (cls) span.className = cls;
     span.textContent = text;
     outputEl.appendChild(span);
+    maybeFoldOldOutput();
     outputEl.scrollTop = outputEl.scrollHeight;
   }
 
@@ -29,6 +70,7 @@ export function createConsole({ outputEl, stdinInputEl, stdinFormEl, queueEl }) 
     const span = document.createElement("span");
     span.textContent = text;
     outputEl.appendChild(span);
+    maybeFoldOldOutput();
     outputEl.scrollTop = outputEl.scrollHeight;
   }
 
