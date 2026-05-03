@@ -79,6 +79,7 @@ const DEFAULT_STATE = {
     theme: "vscode",
     fontSize: 15,
     wrap: false,
+    outputWrap: false,
     seenOnboarding: false,
     streamingMode: false,
     dismissedInstallBanner: false,
@@ -381,6 +382,16 @@ function setRunning(running, language) {
   const showStop = ASYNC_LANGUAGES.has(language);
   stopBtn.style.display = showStop ? "" : "none";
   stopBtn.disabled = !running || !showStop;
+}
+
+// Toggle .wrap-on on the output panel based on the current setting.
+// When ON: long output lines wrap to fit the visible width.
+// When OFF (default): long lines stay on one line and the user swipes
+// horizontally to read them — useful for code-like output.
+function applyOutputWrap() {
+  const out = document.getElementById("output");
+  if (!out) return;
+  out.classList.toggle("wrap-on", !!state.settings.outputWrap);
 }
 
 function updateRunModeBadge() {
@@ -915,7 +926,10 @@ function init() {
   document.getElementById("theme-select").value = state.settings.theme;
   document.getElementById("font-size").value = state.settings.fontSize;
   document.getElementById("line-wrap").checked = state.settings.wrap;
+  document.getElementById("output-wrap").checked = !!state.settings.outputWrap;
   document.getElementById("streaming-mode").checked = !!state.settings.streamingMode;
+  // Apply current output-wrap setting on first paint.
+  applyOutputWrap();
 
   document.getElementById("run-button").addEventListener("click", runCode);
   document.getElementById("stop-button").addEventListener("click", stopCode);
@@ -994,6 +1008,11 @@ function init() {
   document.getElementById("line-wrap").addEventListener("change", (e) => {
     state.settings.wrap = e.target.checked;
     editor.setWrap(state.settings.wrap);
+    persist();
+  });
+  document.getElementById("output-wrap").addEventListener("change", (e) => {
+    state.settings.outputWrap = e.target.checked;
+    applyOutputWrap();
     persist();
   });
   document.getElementById("streaming-mode").addEventListener("change", (e) => {

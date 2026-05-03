@@ -174,8 +174,12 @@
         <input id="font-size" type="range" min="12" max="22" step="1" />
       </label>
       <label class="menu-field menu-field--row">
-        <span>Wrap long lines</span>
+        <span>Wrap long lines (editor)</span>
         <input id="line-wrap" type="checkbox" />
+      </label>
+      <label class="menu-field menu-field--row" title="ON = long output lines wrap to fit the panel width. OFF = swipe horizontally to read long lines.">
+        <span>Wrap long lines (output)</span>
+        <input id="output-wrap" type="checkbox" />
       </label>
       <label class="menu-field menu-field--row" title="When ON, output appears as printf runs (good for finding where a program crashes). When OFF, you can interactively answer scanf prompts mid-run.">
         <span>Stream output (live)</span>
@@ -240,6 +244,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="vendor/JSCPP.es5.min.js?v=2.0.6"></script>
-  <script type="module" src="js/app.js?v=9"></script>
+  <script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>
