@@ -3,6 +3,7 @@ import { runCStreaming } from "./c-streaming.js";
 import { runPython } from "./python.js";
 import { runJava } from "./java.js";
 import { canBlockForInput } from "../../../runners/input-channel";
+import { runPythonInWorker } from "../../../runners/python/python-runner";
 
 export async function run({ language, code, consoleIO, signal, onErrorLine }) {
   switch (language) {
@@ -20,6 +21,11 @@ export async function run({ language, code, consoleIO, signal, onErrorLine }) {
         ? runCpp({ code, consoleIO, signal, onErrorLine })
         : runC({ code, consoleIO, signal, onErrorLine });
     case "python":
+      // Same idea as C: in a worker, input() pauses for the terminal and
+      // Stop can interrupt. The main-thread runner is the fallback.
+      if (canBlockForInput()) {
+        return runPythonInWorker({ code, consoleIO, signal, onErrorLine });
+      }
       return runPython({ code, consoleIO, signal, onErrorLine });
     case "java":
       return runJava({ code, consoleIO, signal });

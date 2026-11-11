@@ -11,7 +11,7 @@ A mobile-friendly web IDE for **C, C++, Python**, and **Java** that runs entirel
 - **Run Python** via [Pyodide](https://pyodide.org/) (lazy-loaded on first Python run).
 - **Save** your code as `.c` / `.cpp` / `.py` / `.java` files; **open** files back from your device.
 - **Auto-save** every keystroke to `localStorage`, plus tabs / multi-file support.
-- **Stdin row** for `scanf` / `cin` / `input()` programs.
+- **Terminal input like a desktop IDE**: when a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
 - **Installable as a PWA** — "Add to Home Screen" on phones for an app-like icon.
 - **Works offline** after the first visit (service worker precaches the app shell + JSCPP bundle).
 - **Onboarding hint, examples menu** (Hello World, scanf input, loops, arrays, etc.).
@@ -61,7 +61,8 @@ On the first visit, the service worker (`sw.js`) precaches `index.html`, the CSS
 
 - **No varargs in `<stdio.h>`** before JSCPP 2.x — we ship 2.0.6 which supports `printf` and `scanf`. Multi-file `#include "myheader.h"` projects aren't supported.
 - **Java** is a placeholder in v1; the Java runner shows a "coming soon" message and lets you save `.java` files. A WASM JVM (DoppioJVM / TeaVM) will land in a future update.
-- **Mid-run interactive stdin in C/C++**: JSCPP runs synchronously, so type all required input lines into the stdin row *before* clicking Run. (Python supports interactive `input()` properly.)
+- **Interactive input needs cross-origin isolation.** C, C++ and Python run in workers and pause at `scanf` / `cin` / `input()` until you type in the terminal. That relies on shared memory, which browsers only allow when the site sends the headers in `public/_headers`. On a host without them, C and C++ fall back to reading input queued before the run.
+- **`scanf("%c", ...)` does not work** in the bundled JSCPP build (it fails upstream too).
 - **No real `gcc`/`clang`** — JSCPP is an interpreter that covers the C subset typical for coursework. If you need full compiler features, that would require a much larger WASM toolchain.
 
 ## Tech credits
