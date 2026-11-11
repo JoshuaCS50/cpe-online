@@ -3,12 +3,18 @@
 
 import alertTriangle from "@tabler/icons/outline/alert-triangle.svg?raw";
 import stepOver from "@tabler/icons/outline/arrow-bounce.svg?raw";
+import book from "@tabler/icons/outline/book-2.svg?raw";
 import bug from "@tabler/icons/outline/bug.svg?raw";
+import bulb from "@tabler/icons/outline/bulb.svg?raw";
 import code from "@tabler/icons/outline/code.svg?raw";
 import copy from "@tabler/icons/outline/copy.svg?raw";
 import database from "@tabler/icons/outline/database.svg?raw";
 import databaseOff from "@tabler/icons/outline/database-off.svg?raw";
+import download from "@tabler/icons/outline/download.svg?raw";
 import eraser from "@tabler/icons/outline/eraser.svg?raw";
+import fileZip from "@tabler/icons/outline/file-zip.svg?raw";
+import settings from "@tabler/icons/outline/settings.svg?raw";
+import upload from "@tabler/icons/outline/upload.svg?raw";
 import fileCode from "@tabler/icons/outline/file-code.svg?raw";
 import files from "@tabler/icons/outline/files.svg?raw";
 import pencil from "@tabler/icons/outline/pencil.svg?raw";
@@ -26,12 +32,18 @@ import x from "@tabler/icons/outline/x.svg?raw";
 
 const ICONS = {
   alertTriangle,
+  book,
   bug,
+  bulb,
   code,
   copy,
   database,
   databaseOff,
+  download,
   eraser,
+  fileZip,
+  settings,
+  upload,
   fileCode,
   files,
   pencil,

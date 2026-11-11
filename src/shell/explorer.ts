@@ -1,5 +1,7 @@
 // Explorer: the list of files in the project, with create, rename and delete.
 
+import { dateStamp, downloadFile, pickTextFiles } from "../storage/device-files";
+import { createZip } from "../storage/zip";
 import { button, el } from "./dom";
 import { icon } from "./icons";
 import type { Workspace } from "./workspace";
@@ -17,12 +19,11 @@ export function createExplorer(host: HTMLElement, options: ExplorerOptions): voi
 
   const list = el("ul", { class: "file-list", role: "list" });
   const title = el("span", { class: "side-title" }, ["Explorer"]);
-  const header = el("div", { class: "side-header" }, [
-    title,
+  const actions = el("div", { class: "side-actions" }, [
     button({
       label: "New file",
       icon: "plus",
-      class: "btn btn-icon",
+      class: "btn btn-icon btn-quiet",
       onClick: async () => {
         const file = await workspace.createFile();
         renamingId = file.id;
@@ -30,7 +31,40 @@ export function createExplorer(host: HTMLElement, options: ExplorerOptions): voi
         render();
       },
     }),
+    button({
+      label: "Open files from this device",
+      icon: "upload",
+      class: "btn btn-icon btn-quiet",
+      onClick: async () => {
+        const picked = await pickTextFiles();
+        for (const file of picked) await workspace.addFile(file.name, file.text);
+        if (picked.length > 0) onOpen();
+      },
+    }),
+    button({
+      label: "Save the open file to this device",
+      icon: "download",
+      class: "btn btn-icon btn-quiet",
+      onClick: async () => {
+        const file = workspace.activeFile;
+        if (!file) return;
+        await workspace.flush();
+        downloadFile(file.name, file.doc);
+      },
+    }),
+    button({
+      label: "Save all files as one zip",
+      icon: "fileZip",
+      class: "btn btn-icon btn-quiet",
+      onClick: async () => {
+        if (workspace.files.length === 0) return;
+        await workspace.flush();
+        const archive = createZip(workspace.files.map((file) => ({ name: file.name, text: file.doc })));
+        downloadFile(`cpe-online-files-${dateStamp()}.zip`, archive);
+      },
+    }),
   ]);
+  const header = el("div", { class: "side-header" }, [title, actions]);
   const project = el("div", { class: "side-project" });
   host.append(header, project, list);
 

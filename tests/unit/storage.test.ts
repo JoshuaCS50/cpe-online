@@ -112,6 +112,14 @@ describe.each(stores)("%s store", (_name, open) => {
     expect(await store.getValue("flag")).toBeUndefined();
   });
 
+  it("keeps both changes when two settings are saved back to back", async () => {
+    const store = await open();
+    const first = { ...DEFAULT_SETTINGS, theme: "light" as const };
+    const second = { ...first, fontSize: 18 };
+    await Promise.all([saveSettings(store, first), saveSettings(store, second)]);
+    expect(await loadSettings(store)).toEqual(second);
+  });
+
   it("loads default settings from an empty store, then saves a patch", async () => {
     const store = await open();
     expect(await loadSettings(store)).toEqual(DEFAULT_SETTINGS);
@@ -179,6 +187,8 @@ describe("file types", () => {
       ["a.hh", "cpp"],
       ["script.py", "python"],
       ["Main.java", "java"],
+      ["plot_data.m", "matlab"],
+      ["SCRIPT.M", "matlab"],
       ["notes.txt", "c"],
       ["Makefile", "c"],
       ["archive.tar.py", "python"],
@@ -187,7 +197,7 @@ describe("file types", () => {
   });
 
   it("gives each language a save extension that maps back to it", () => {
-    for (const language of ["c", "cpp", "python", "java"] as const) {
+    for (const language of ["c", "cpp", "python", "java", "matlab"] as const) {
       expect(languageFromFilename(`x.${extensionForLanguage(language)}`)).toBe(language);
     }
   });

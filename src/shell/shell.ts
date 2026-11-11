@@ -16,18 +16,24 @@ import { canBlockForInput } from "../runners/input-channel";
 import { debugPythonInWorker } from "../runners/python/python-runner";
 import { openStore } from "../storage/idb-store";
 import { migrateLegacyState } from "../storage/migrate-localstorage";
+import { loadSettings, saveSettings } from "../storage/settings";
 import { createConsole } from "../terminal/console";
 import { button, el } from "./dom";
 import { createEditorTabs } from "./editor-tabs";
+import { createExamplesView } from "./examples-view";
 import { createExplorer } from "./explorer";
 import { icon } from "./icons";
+import { createReferenceView } from "./reference-view";
+import { createSettingsView } from "./settings-view";
 import { openWorkspace } from "./workspace";
 
 type Tier = "phone" | "tablet" | "laptop";
 /** On a phone only one of these fills the screen at a time. */
 type View = "files" | "code" | "terminal";
+/** What the side panel is showing. */
+type SideView = "files" | "examples" | "reference" | "settings";
 
-const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java" };
+const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java", matlab: "MATLAB" };
 
 function currentTier(): Tier {
   if (window.matchMedia("(max-width: 599px)").matches) return "phone";
@@ -76,21 +82,43 @@ export async function bootShell(): Promise<void> {
     el("div", { class: "title-actions" }, [runButton, debugButton, debugControls, stopButton]),
   ]);
 
-  const explorerToggle = button({
-    label: "Explorer (Ctrl+B)",
-    icon: "files",
-    class: "rail-btn",
-    onClick: () => toggleSidebar(),
-  });
+  // The side panel shows one view at a time. The rail picks it on tablets and
+  // laptops; phones get a row of tabs at the top of the panel instead.
+  const SIDE_VIEWS: { id: SideView; label: string; icon: "files" | "bulb" | "book" | "settings" }[] = [
+    { id: "files", label: "Explorer", icon: "files" },
+    { id: "examples", label: "Examples", icon: "bulb" },
+    { id: "reference", label: "Reference", icon: "book" },
+    { id: "settings", label: "Settings", icon: "settings" },
+  ];
+  const sideSections = new Map<SideView, HTMLElement>();
+  const railButtons = new Map<SideView, HTMLButtonElement>();
+  const sideTabs = el("div", { class: "side-tabs", role: "tablist", "aria-label": "Side panel" });
+  for (const view of SIDE_VIEWS) {
+    sideSections.set(view.id, el("section", { class: "side-view", "data-side": view.id, "aria-label": view.label }));
+    railButtons.set(
+      view.id,
+      button({ label: view.label, icon: view.icon, class: "rail-btn", onClick: () => pickSideView(view.id) }),
+    );
+    const tab = el("button", { type: "button", class: "side-tab", role: "tab", "data-side": view.id }, [view.label]);
+    tab.addEventListener("click", () => showSideView(view.id));
+    sideTabs.append(tab);
+  }
+  const sideSection = (id: SideView): HTMLElement => sideSections.get(id) as HTMLElement;
+
   const terminalToggle = button({
     label: "Terminal (Ctrl+J)",
     icon: "terminal",
     class: "rail-btn",
     onClick: () => togglePanel(),
   });
-  const rail = el("nav", { class: "rail", "aria-label": "Views" }, [explorerToggle, terminalToggle]);
+  const rail = el("nav", { class: "rail", "aria-label": "Views" }, [
+    ...SIDE_VIEWS.filter((view) => view.id !== "settings").map((view) => railButtons.get(view.id) as HTMLElement),
+    terminalToggle,
+    el("span", { class: "rail-spacer" }),
+    railButtons.get("settings") as HTMLElement,
+  ]);
 
-  const sidebar = el("aside", { class: "sidebar", "aria-label": "Explorer" });
+  const sidebar = el("aside", { class: "sidebar", "aria-label": "Side panel" }, [sideTabs, ...sideSections.values()]);
   const scrim = el("div", { class: "scrim" });
   scrim.addEventListener("click", () => setSidebar(false));
 
@@ -170,12 +198,35 @@ export async function bootShell(): Promise<void> {
 
   // ───── Layout state ─────
 
+  let sideView: SideView = "files";
+
+  function syncSideControls(): void {
+    const open = shell.dataset.sidebar === "open";
+    for (const [id, node] of railButtons) node.setAttribute("aria-pressed", String(open && id === sideView));
+    for (const tab of sideTabs.children) {
+      tab.setAttribute("aria-selected", String((tab as HTMLElement).dataset.side === sideView));
+    }
+  }
   function setSidebar(open: boolean): void {
     shell.dataset.sidebar = open ? "open" : "closed";
-    explorerToggle.setAttribute("aria-pressed", String(open));
+    syncSideControls();
   }
   function toggleSidebar(): void {
     setSidebar(shell.dataset.sidebar !== "open");
+  }
+  function showSideView(view: SideView): void {
+    sideView = view;
+    shell.dataset.side = view;
+    syncSideControls();
+  }
+  /** Rail behaviour: picking the view that is already showing closes the panel. */
+  function pickSideView(view: SideView): void {
+    if (shell.dataset.sidebar === "open" && sideView === view) {
+      setSidebar(false);
+    } else {
+      showSideView(view);
+      setSidebar(true);
+    }
   }
   function setPanel(open: boolean): void {
     shell.dataset.panel = open ? "open" : "closed";
@@ -260,14 +311,44 @@ export async function bootShell(): Promise<void> {
   });
   const symbolBar = createSymbolBar(symbolsEl, () => (loadedFileId === null ? null : editor));
 
-  createExplorer(sidebar, {
-    workspace,
-    onOpen: () => {
-      if (root.dataset.tier === "phone") setView("code");
-      else if (root.dataset.tier === "tablet") setSidebar(false);
+  /** After a file is chosen, get the side panel out of the way where it covers the editor. */
+  const revealEditor = (): void => {
+    if (root.dataset.tier === "phone") setView("code");
+    else if (root.dataset.tier === "tablet") setSidebar(false);
+  };
+  createExplorer(sideSection("files"), { workspace, onOpen: revealEditor });
+  createExamplesView(sideSection("examples"), { workspace, onOpen: revealEditor });
+  createReferenceView(sideSection("reference"));
+  createEditorTabs(tabsEl, workspace);
+
+  // ───── Settings ─────
+
+  let settings = await loadSettings(store);
+  const systemLight = window.matchMedia("(prefers-color-scheme: light)");
+
+  function applySettings(): void {
+    const light = settings.theme === "light" || (settings.theme === "auto" && systemLight.matches);
+    root.dataset.theme = light ? "light" : "dark";
+    // The editor's syntax colours are keyed on this class.
+    root.classList.toggle("theme-light", light);
+    editor.setFontSize(settings.fontSize);
+    editor.setWrap(settings.wrap);
+    outputEl.classList.toggle("no-wrap", !settings.outputWrap);
+  }
+
+  createSettingsView(sideSection("settings"), {
+    settings,
+    onChange: (patch) => {
+      settings = { ...settings, ...patch };
+      applySettings();
+      // Save the whole object, not the patch: two quick changes would
+      // otherwise each merge into the old stored value and one would be lost.
+      void saveSettings(store, settings).catch(console.warn);
     },
   });
-  createEditorTabs(tabsEl, workspace);
+  systemLight.addEventListener("change", applySettings);
+  applySettings();
+  showSideView("files");
 
   function syncEditor(): void {
     const file = workspace.activeFile;
@@ -392,6 +473,15 @@ export async function bootShell(): Promise<void> {
     consoleIO.cancelPendingReads();
     setPanel(true);
     if (root.dataset.tier === "phone") setView("terminal");
+    if (file.language === "matlab") {
+      // Honest placeholder until a MATLAB-compatible runtime is added.
+      consoleIO.writeInfo(
+        "MATLAB files can be written and saved here, but they cannot run in the browser yet.\n" +
+          "To run this file, open it in MATLAB or GNU Octave on a computer.\n",
+      );
+      runChip.textContent = "MATLAB cannot run here yet";
+      return;
+    }
     setRunning(true, file.language);
     runChip.textContent = `Running ${file.name}`;
     abort = new AbortController();

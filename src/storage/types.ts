@@ -1,8 +1,8 @@
 // Records kept on the device.
 
-export type Language = "c" | "cpp" | "python" | "java";
+export type Language = "c" | "cpp" | "python" | "java" | "matlab";
 
-export const LANGUAGES: readonly Language[] = ["c", "cpp", "python", "java"];
+export const LANGUAGES: readonly Language[] = ["c", "cpp", "python", "java", "matlab"];
 
 export function isLanguage(value: unknown): value is Language {
   return typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);

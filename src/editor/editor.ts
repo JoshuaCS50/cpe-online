@@ -31,7 +31,7 @@ import {
 import { tags } from "@lezer/highlight";
 import "./editor.css";
 
-export type EditorLanguage = "c" | "cpp" | "python" | "java";
+export type EditorLanguage = "c" | "cpp" | "python" | "java" | "matlab";
 
 /** 1-based cursor position, as shown in the status bar. */
 export interface CursorPosition {
@@ -87,13 +87,21 @@ async function loadLanguage(language: string): Promise<Extension> {
       return (await import("@codemirror/lang-python")).python();
     case "java":
       return (await import("@codemirror/lang-java")).java();
+    case "matlab": {
+      // MATLAB and Octave share a syntax; the Octave mode highlights both.
+      const [{ StreamLanguage }, { octave }] = await Promise.all([
+        import("@codemirror/language"),
+        import("@codemirror/legacy-modes/mode/octave"),
+      ]);
+      return StreamLanguage.define(octave);
+    }
     default:
       return cpp();
   }
 }
 
 function isBundled(language: string): boolean {
-  return language !== "python" && language !== "java";
+  return language !== "python" && language !== "java" && language !== "matlab";
 }
 
 // ───── Theme: everything is a CSS variable ─────

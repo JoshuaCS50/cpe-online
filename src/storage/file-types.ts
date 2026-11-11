@@ -12,6 +12,7 @@ const EXTENSIONS: Record<string, Language> = {
   hh: "cpp",
   py: "python",
   java: "java",
+  m: "matlab",
 };
 
 /** Language for a file name, by extension. Unknown or missing extensions count as C. */
@@ -30,6 +31,8 @@ export function extensionForLanguage(language: Language): string {
       return "py";
     case "java":
       return "java";
+    case "matlab":
+      return "m";
     case "c":
       return "c";
   }

@@ -74,6 +74,7 @@ describe.each(stores)("migrateLegacyState into the %s store", (_name, open) => {
       theme: "catppuccin",
       fontSize: 18,
       wrap: true,
+      outputWrap: false,
       seenOnboarding: true,
     });
   });

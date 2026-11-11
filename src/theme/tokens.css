@@ -100,3 +100,24 @@
     --dur: 0ms;
   }
 }
+
+/* Light palette for Code mode. */
+:root[data-mode="code"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --bg-2: #eceef2;
+  --bg-3: #e1e5eb;
+  --line: #d0d5de;
+  --line-strong: #a9b1bf;
+  --ink: #1b2230;
+  --ink-dim: #465063;
+  --ink-faint: #667085;
+  --accent: #0c7040;
+  --accent-ink: #f6f7f9;
+  --accent-soft: rgb(12 112 64 / 0.13);
+  --ok: #0c7040;
+  --warn: #8a5a00;
+  --err: #b3261e;
+  --err-soft: rgb(179 38 30 / 0.12);
+  --shadow: 0 12px 32px rgb(27 34 48 / 0.18);
+}

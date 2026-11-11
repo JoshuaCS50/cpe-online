@@ -63,8 +63,31 @@ const PYTHON_KEYS: SymbolKey[] = [
   { label: "%", name: "percent" },
 ];
 
+const MATLAB_KEYS: SymbolKey[] = [
+  pair("(", ")", "parentheses"),
+  pair("[", "]", "square brackets"),
+  { label: ";", name: "semicolon" },
+  pair("'", "'", "single quotes"),
+  { label: "%", name: "percent (comment)" },
+  { label: "=", name: "equals" },
+  { label: "==", name: "equal to" },
+  { label: "~=", name: "not equal to" },
+  { label: ":", name: "colon" },
+  { label: ",", name: "comma" },
+  { label: ".", name: "dot" },
+  { label: "*", name: "asterisk" },
+  { label: "/", name: "slash" },
+  { label: "^", name: "power" },
+  { label: "&&", name: "logical and" },
+  { label: "||", name: "logical or" },
+  { label: "end", insert: "end", name: "end keyword" },
+  { label: "\\n", name: "newline escape" },
+];
+
 function keysFor(language: string): SymbolKey[] {
-  return language === "python" ? PYTHON_KEYS : C_KEYS;
+  if (language === "python") return PYTHON_KEYS;
+  if (language === "matlab") return MATLAB_KEYS;
+  return C_KEYS;
 }
 
 export interface SymbolBar {

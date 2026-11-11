@@ -26,7 +26,10 @@ export interface Workspace {
   open(id: string): void;
   /** Closes the tab. The file itself stays in the project. */
   closeTab(id: string): void;
+  /** Creates an empty file named after the active file's language. */
   createFile(): Promise<FileRecord>;
+  /** Adds a file with the given text. The name is made unique; its extension sets the language. */
+  addFile(name: string, doc: string): Promise<FileRecord>;
   /** Returns an error message for the user, or null on success. */
   rename(id: string, name: string): Promise<string | null>;
   remove(id: string): Promise<void>;
@@ -132,16 +135,25 @@ export async function openWorkspace(store: AppStore): Promise<Workspace> {
       persistLayout();
       notify();
     },
-    async createFile() {
+    createFile() {
       const language = workspace.activeFile?.language ?? "c";
+      return workspace.addFile(`untitled.${extensionForLanguage(language)}`, "");
+    },
+    async addFile(name, doc) {
+      // Names come from device files and examples; keep them flat.
+      const clean = name.trim().replace(/[\\/]/g, "-") || "untitled.c";
+      const dot = clean.lastIndexOf(".");
+      const base = dot > 0 ? clean.slice(0, dot) : clean;
+      const extension = dot > 0 ? clean.slice(dot + 1) : "c";
       const taken = new Set(files.map((file) => file.name.toLowerCase()));
+      const unique = uniqueName(taken, base, extension);
       const now = Date.now();
       const file: FileRecord = {
         id: newId(),
         projectId: current.id,
-        name: uniqueName(taken, "untitled", extensionForLanguage(language)),
-        language,
-        doc: "",
+        name: unique,
+        language: languageFromFilename(unique),
+        doc,
         createdAt: now,
         savedAt: now,
       };

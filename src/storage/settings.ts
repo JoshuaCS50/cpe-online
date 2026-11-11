@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   theme: "vscode",
   fontSize: 15,
   wrap: false,
-  outputWrap: false,
+  outputWrap: true,
   seenOnboarding: false,
   dismissedInstallBanner: false,
 };
