@@ -7,6 +7,11 @@
   <meta name="description" content="CPE Online — a mobile-friendly web IDE for C, C++, Python, and Java. Runs fully offline in your browser after the first visit." />
   <title>CPE Online — Mobile C/C++ IDE</title>
   <link rel="manifest" href="manifest.webmanifest" />
+  <!-- Keep the page dark and hidden until src/main.ts has loaded its styles. -->
+  <style>
+    html { background: #0e1116; }
+    html:not([data-ready]) body { visibility: hidden; }
+  </style>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231e1e2e'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='monospace' font-size='26' font-weight='700' fill='%2389b4fa'%3E%7B%7D%3C/text%3E%3C/svg%3E" />
 </head>
 <body>

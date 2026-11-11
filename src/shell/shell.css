@@ -1,0 +1,761 @@
+/* IDE shell layout and components. Colours and sizes come from tokens.css.
+   Tiers are set on <html data-tier>: phone (< 600), tablet (600 to 1023), laptop. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.75;
+}
+
+/* ───── Frame ───── */
+
+.shell {
+  --panel-h: 34dvh;
+  display: grid;
+  height: 100dvh;
+  grid-template-columns: var(--rail-w) auto minmax(0, 1fr);
+  grid-template-rows: var(--bar-h) minmax(0, 1fr) var(--status-h);
+  grid-template-areas:
+    "title title title"
+    "rail side main"
+    "status status status";
+}
+
+.titlebar {
+  grid-area: title;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-2) 0 var(--s-3);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.brand-mark {
+  color: var(--accent);
+}
+
+.title-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title-actions {
+  display: flex;
+  gap: var(--s-2);
+}
+
+/* ───── Buttons ───── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 var(--s-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.btn-run {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+
+.btn-run:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 86%, white);
+}
+
+.btn-stop,
+.btn-outline {
+  border-color: var(--line-strong);
+}
+
+.btn-stop:not(:disabled) {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.btn-stop:hover:not(:disabled) {
+  background: var(--err-soft);
+}
+
+.btn-outline:hover {
+  background: var(--bg-3);
+}
+
+.btn-icon {
+  width: var(--tap);
+  padding: 0;
+}
+
+.btn-quiet {
+  color: var(--ink-faint);
+}
+
+.btn-quiet:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+
+/* ───── Activity rail ───── */
+
+.rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-2) 0;
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+}
+
+.rail-btn {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease);
+}
+
+.rail-btn .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.rail-btn:hover {
+  color: var(--ink);
+}
+
+.rail-btn[aria-pressed="true"] {
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ───── Explorer ───── */
+
+.sidebar {
+  grid-area: side;
+  width: var(--side-w);
+  overflow: auto;
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+}
+
+.shell[data-sidebar="closed"] .sidebar {
+  display: none;
+}
+
+.scrim {
+  display: none;
+}
+
+.side-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-1) var(--s-1) var(--s-1) var(--s-3);
+}
+
+.side-title,
+.panel-title {
+  color: var(--ink-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.side-project {
+  padding: var(--s-1) var(--s-3) var(--s-2);
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+}
+
+.file-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  min-height: max(30px, var(--tap));
+  color: var(--ink-dim);
+}
+
+.file-row:hover {
+  background: var(--bg-3);
+}
+
+.file-row.is-active {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--ink);
+}
+
+.file-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  align-self: stretch;
+  padding: 0 var(--s-2) 0 var(--s-3);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.file-actions {
+  display: none;
+  padding-right: var(--s-1);
+}
+
+.file-row:hover .file-actions,
+.file-row:focus-within .file-actions {
+  display: flex;
+}
+
+.file-actions .btn-icon {
+  width: 28px;
+  min-height: 28px;
+}
+
+.file-row.is-renaming {
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-3);
+  background: var(--bg-3);
+}
+
+.file-rename {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.file-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--err);
+  font-size: var(--fs-xs);
+}
+
+.side-empty {
+  padding: var(--s-3);
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+}
+
+/* ───── Editor area ───── */
+
+.main {
+  grid-area: main;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 5px var(--panel-h);
+  min-width: 0;
+  min-height: 0;
+}
+
+.shell[data-panel="closed"] .main {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.shell[data-panel="closed"] .splitter,
+.shell[data-panel="closed"] .panel {
+  display: none;
+}
+
+.editor-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.tabs {
+  display: flex;
+  min-height: 34px;
+  overflow-x: auto;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+
+.tab {
+  display: flex;
+  flex: none;
+  align-items: center;
+  border-right: 1px solid var(--line);
+  color: var(--ink-faint);
+}
+
+.tab.is-active {
+  background: var(--bg);
+  box-shadow: inset 0 2px 0 var(--accent);
+  color: var(--ink);
+}
+
+.tab-select {
+  height: max(34px, var(--tap));
+  padding: 0 var(--s-1) 0 var(--s-3);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab-close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: var(--s-1);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tab-close .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tab.is-active .tab-close,
+.tab:hover .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--bg-3);
+}
+
+/* Symbol keys: only where there is no hardware keyboard. */
+.symbols {
+  display: none;
+  gap: 6px;
+  padding: 6px var(--s-2);
+  overflow-x: auto;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+
+.sym {
+  flex: none;
+  min-width: 42px;
+  height: 38px;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  cursor: pointer;
+}
+
+.sym:active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.editor-host {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-host .cm-editor {
+  height: 100%;
+}
+
+.editor-host .cm-scroller {
+  font-size: var(--editor-fontsize, 14px);
+}
+
+.editor-empty {
+  display: none;
+}
+
+.editor-pane.is-empty > .tabs,
+.editor-pane.is-empty > .symbols,
+.editor-pane.is-empty > .editor-host {
+  display: none;
+}
+
+.editor-pane.is-empty {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.editor-pane.is-empty > .editor-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s-3);
+  color: var(--ink-dim);
+}
+
+.editor-empty p {
+  margin: 0;
+}
+
+/* ───── Terminal panel ───── */
+
+.splitter {
+  border-top: 1px solid var(--line);
+  cursor: row-resize;
+  touch-action: none;
+  transition: background var(--dur) var(--ease);
+}
+
+.splitter:hover,
+.splitter:focus-visible {
+  background: var(--accent-soft);
+}
+
+.panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 var(--s-1) 0 var(--s-3);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-title {
+  color: var(--ink);
+}
+
+.panel-actions {
+  display: flex;
+}
+
+.panel-actions .btn-icon {
+  width: max(28px, var(--tap));
+  min-height: max(28px, var(--tap));
+}
+
+.output {
+  margin: 0;
+  padding: var(--s-3);
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.output:empty::before {
+  content: "Press Run to start your program. Its output appears here, and you type its input here.";
+  color: var(--ink-faint);
+}
+
+.output .line-err {
+  color: var(--err);
+}
+
+.output .line-info {
+  color: var(--ink-faint);
+}
+
+.output-fold summary {
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+/* ───── Status bar ───── */
+
+.statusbar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 0 var(--s-3);
+  overflow: hidden;
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.shell[data-running="true"] .statusbar {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-item:empty {
+  display: none;
+}
+
+.status-item .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.status-item.is-warning {
+  color: var(--warn);
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.bottom-nav {
+  display: none;
+}
+
+/* ───── Touch ───── */
+
+@media (pointer: coarse) {
+  .symbols {
+    display: flex;
+  }
+
+  .file-actions {
+    display: flex;
+  }
+
+  .file-actions .btn-icon {
+    width: 40px;
+    min-height: 40px;
+  }
+
+  .tab-close {
+    width: 36px;
+    height: 36px;
+    opacity: 1;
+  }
+}
+
+/* ───── Tablet: the explorer slides over the editor ───── */
+
+:root[data-tier="tablet"] .shell {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-areas:
+    "title title"
+    "rail main"
+    "status status";
+}
+
+:root[data-tier="tablet"] .sidebar {
+  position: fixed;
+  top: var(--bar-h);
+  bottom: var(--status-h);
+  left: var(--rail-w);
+  z-index: var(--z-sidebar);
+  box-shadow: var(--shadow);
+}
+
+:root[data-tier="tablet"] .shell[data-sidebar="open"] .scrim {
+  display: block;
+  position: fixed;
+  inset: var(--bar-h) 0 var(--status-h) var(--rail-w);
+  z-index: var(--z-overlay);
+  background: rgb(3 6 10 / 0.5);
+}
+
+/* ───── Phone: one screen at a time, chosen from the bottom bar ───── */
+
+:root[data-tier="phone"] .shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--bar-h) minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title"
+    "main"
+    "nav";
+}
+
+:root[data-tier="phone"] .rail,
+:root[data-tier="phone"] .statusbar,
+:root[data-tier="phone"] .splitter,
+:root[data-tier="phone"] .brand-name {
+  display: none;
+}
+
+:root[data-tier="phone"] .bottom-nav {
+  grid-area: nav;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
+}
+
+.nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: var(--nav-h);
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+}
+
+.nav-btn[aria-current="page"] {
+  color: var(--accent);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* The Stop label gives way to its icon; the name stays for screen readers. */
+:root[data-tier="phone"] .btn-stop .btn-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+:root[data-tier="phone"] .btn-stop {
+  width: var(--tap);
+  padding: 0;
+}
+
+:root[data-tier="phone"] .sidebar,
+:root[data-tier="phone"] .shell[data-sidebar="closed"] .sidebar {
+  grid-area: main;
+  display: none;
+  width: auto;
+  border-right: 0;
+}
+
+:root[data-tier="phone"] .shell[data-view="files"] .sidebar {
+  display: block;
+}
+
+:root[data-tier="phone"] .shell[data-view="files"] .main {
+  display: none;
+}
+
+:root[data-tier="phone"] .main,
+:root[data-tier="phone"] .shell[data-panel="closed"] .main {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+:root[data-tier="phone"] .shell[data-view="code"] .panel,
+:root[data-tier="phone"] .shell[data-view="terminal"] .editor-pane {
+  display: none;
+}
+
+:root[data-tier="phone"] .shell[data-view="terminal"] .panel {
+  display: grid;
+}
