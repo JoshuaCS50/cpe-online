@@ -6,6 +6,10 @@ import "../theme/tokens.css";
 import "./shell.css";
 
 import { createDebugView } from "../debugger/debug-view";
+import { explainError } from "../diagnostics/engine";
+import { createErrorCard } from "../diagnostics/error-card";
+import type { ErrorExplanation, RawError } from "../diagnostics/types";
+import type { FileRecord } from "../storage/types";
 import type { DebugCommand, DebugSession } from "../debugger/types";
 import { createEditor } from "../editor/editor";
 import type { EditorHandle } from "../editor/editor";
@@ -153,15 +157,23 @@ export async function bootShell(): Promise<void> {
 
   const outputEl = el("pre", { class: "output", role: "log", "aria-live": "polite", "aria-label": "Terminal output" });
   const debugPane = el("aside", { class: "debug-pane", "aria-label": "Debugger" });
-  const panel = el("section", { class: "panel", "aria-label": "Terminal" }, [
+  // The panel has two tabs: the terminal, and the list of problems from the last run.
+  const problemsEl = el("div", { class: "problems", role: "list", "aria-label": "Problems" });
+  const problemsCount = el("span", { class: "panel-count" });
+  const terminalTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Terminal"]);
+  const problemsTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Problems", problemsCount]);
+  terminalTab.addEventListener("click", () => showPanelTab("terminal"));
+  problemsTab.addEventListener("click", () => showPanelTab("problems"));
+
+  const panel = el("section", { class: "panel", "aria-label": "Terminal and problems" }, [
     el("div", { class: "panel-header" }, [
-      el("span", { class: "panel-title" }, ["Terminal"]),
+      el("div", { class: "panel-tabs", role: "tablist" }, [terminalTab, problemsTab]),
       el("div", { class: "panel-actions" }, [
         button({ label: "Copy output", icon: "copy", class: "btn btn-icon btn-quiet", onClick: () => void copyOutput() }),
         button({ label: "Clear terminal", icon: "eraser", class: "btn btn-icon btn-quiet", onClick: () => consoleIO.clear() }),
       ]),
     ]),
-    el("div", { class: "panel-body" }, [outputEl, debugPane]),
+    el("div", { class: "panel-body" }, [outputEl, problemsEl, debugPane]),
   ]);
 
   const main = el("main", { class: "main" }, [editorPane, splitter, panel]);
@@ -405,6 +417,70 @@ export async function bootShell(): Promise<void> {
     if (loadedFileId === debugFileId) editor.setExecLine(line);
   }
 
+  // ───── Problems: errors from the last run, explained ─────
+
+  interface Problem {
+    explanation: ErrorExplanation;
+    fileId: string;
+    fileName: string;
+  }
+  let problems: Problem[] = [];
+
+  function showPanelTab(tab: "terminal" | "problems"): void {
+    shell.dataset.panelTab = tab;
+    terminalTab.setAttribute("aria-selected", String(tab === "terminal"));
+    problemsTab.setAttribute("aria-selected", String(tab === "problems"));
+  }
+
+  function jumpToProblem(problem: Problem): void {
+    workspace.open(problem.fileId);
+    if (problem.explanation.line !== null) editor.highlightErrorLine(problem.explanation.line);
+    if (root.dataset.tier === "phone") setView("code");
+  }
+
+  function renderProblems(): void {
+    problemsCount.textContent = problems.length > 0 ? String(problems.length) : "";
+    if (problems.length === 0) {
+      problemsEl.replaceChildren(el("p", { class: "problems-empty" }, ["No problems in the last run."]));
+      return;
+    }
+    problemsEl.replaceChildren(
+      ...problems.map((problem) => {
+        const { title, line, column } = problem.explanation;
+        const where = line === null ? problem.fileName : `${problem.fileName}:${line}${column !== null ? `:${column}` : ""}`;
+        const row = el("button", { type: "button", class: "problem-row", role: "listitem" }, [
+          icon("alertTriangle"),
+          el("span", { class: "problem-title" }, [title]),
+          el("span", { class: "problem-where" }, [where]),
+        ]);
+        row.addEventListener("click", () => jumpToProblem(problem));
+        return row;
+      }),
+    );
+  }
+
+  function clearProblems(): void {
+    problems = [];
+    renderProblems();
+    showPanelTab("terminal");
+  }
+
+  /** Explains a runtime's error, shows the card in the terminal and lists it under Problems. */
+  function reportError(file: FileRecord, raw: RawError): void {
+    const explanation = explainError(raw, file.doc);
+    const problem: Problem = { explanation, fileId: file.id, fileName: file.name };
+    if (explanation.line !== null && workspace.activeFile?.id === file.id) editor.highlightErrorLine(explanation.line);
+    const card = createErrorCard(explanation, { fileName: file.name, onJump: () => jumpToProblem(problem) });
+    consoleIO.appendElement(card);
+    // The terminal follows new output to the bottom; a card is read from its top.
+    card.scrollIntoView({ block: "start" });
+    problems = [...problems, problem];
+    renderProblems();
+  }
+
+  renderProblems();
+  showPanelTab("terminal");
+
   async function debug(): Promise<void> {
     const file = workspace.activeFile;
     if (running || !file || !canDebug(file.language)) return;
@@ -412,6 +488,7 @@ export async function bootShell(): Promise<void> {
     running = true;
     await workspace.flush();
     editor.clearErrorLine();
+    clearProblems();
     consoleIO.clear();
     consoleIO.cancelPendingReads();
     setPanel(true);
@@ -439,6 +516,7 @@ export async function bootShell(): Promise<void> {
       },
       breakpoints: breakpointsByFile.get(file.id) ?? [],
       onErrorLine: (line) => editor.highlightErrorLine(line),
+      onError: (text) => reportError(file, { language: file.language, text }),
       listener: {
         onPaused: (state) => {
           if (workspace.activeFile?.id !== debugFileId && debugFileId !== null) workspace.open(debugFileId);
@@ -474,6 +552,7 @@ export async function bootShell(): Promise<void> {
     running = true;
     await workspace.flush();
     editor.clearErrorLine();
+    clearProblems();
     consoleIO.clear();
     consoleIO.cancelPendingReads();
     setPanel(true);
@@ -486,8 +565,32 @@ export async function bootShell(): Promise<void> {
       const onErrorLine = (line: number): void => editor.highlightErrorLine(line);
       const result =
         file.language === "matlab"
-          ? await runMatlabInWorker({ code: file.doc, fileName: file.name, consoleIO, signal: abort.signal, onErrorLine })
-          : await runProgram({ language: file.language, code: file.doc, consoleIO, signal: abort.signal, onErrorLine });
+          ? await runMatlabInWorker({
+              code: file.doc,
+              fileName: file.name,
+              consoleIO,
+              signal: abort.signal,
+              onErrorLine,
+              onError: (error) =>
+                reportError(file, {
+                  language: "matlab",
+                  text: error.diagnostic,
+                  details: {
+                    message: error.message,
+                    identifier: error.identifier,
+                    line: error.line ?? undefined,
+                    column: error.column ?? undefined,
+                  },
+                }),
+            })
+          : await runProgram({
+              language: file.language,
+              code: file.doc,
+              consoleIO,
+              signal: abort.signal,
+              onErrorLine,
+              onError: (text: string) => reportError(file, { language: file.language, text }),
+            });
       if ("stopped" in result && result.stopped) outcome = "Stopped";
       else if (!result.ok) outcome = "Failed";
     } catch (error) {

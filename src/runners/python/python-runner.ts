@@ -13,6 +13,11 @@ export interface PythonRunOptions {
   consoleIO: ConsoleIO;
   signal?: AbortSignal;
   onErrorLine?: (line: number) => void;
+  /**
+   * Receives the full traceback. When given, the runner prints nothing about
+   * the error itself and leaves the explanation to the caller.
+   */
+  onError?: (text: string) => void;
 }
 
 export interface PythonDebugOptions extends PythonRunOptions {
@@ -138,6 +143,11 @@ function execute(
       case "error": {
         if (stopping || message.interrupted) {
           finish({ ok: false, exitCode: -1, stopped: true });
+          break;
+        }
+        if (options.onError) {
+          options.onError(trimTraceback(message.message));
+          finish({ ok: false, exitCode: 1 });
           break;
         }
         const line = errorLineFromTraceback(message.message);

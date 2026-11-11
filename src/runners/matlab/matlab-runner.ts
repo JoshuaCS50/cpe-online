@@ -3,7 +3,7 @@
 
 import type { DebugResult } from "../../debugger/types";
 import type { ConsoleIO } from "../../terminal/console";
-import type { MatlabWorkerMessage, MatlabWorkerRequest } from "./protocol";
+import type { MatlabErrorReport, MatlabWorkerMessage, MatlabWorkerRequest } from "./protocol";
 
 export interface MatlabRunOptions {
   code: string;
@@ -11,6 +11,11 @@ export interface MatlabRunOptions {
   consoleIO: ConsoleIO;
   signal?: AbortSignal;
   onErrorLine?: (line: number) => void;
+  /**
+   * Receives the runtime's error report. When given, the runner prints nothing
+   * about the error itself and leaves the explanation to the caller.
+   */
+  onError?: (error: MatlabErrorReport) => void;
 }
 
 let worker: Worker | null = null;
@@ -90,8 +95,12 @@ export function runMatlabInWorker(options: MatlabRunOptions): Promise<DebugResul
           finish({ ok: true, exitCode: 0 });
           break;
         case "error":
-          if (message.line !== null) onErrorLine?.(message.line);
-          consoleIO.writeErr("\n" + message.message.trimEnd() + "\n");
+          if (options.onError) {
+            options.onError(message.error);
+          } else {
+            if (message.error.line !== null) onErrorLine?.(message.error.line);
+            consoleIO.writeErr("\n" + message.error.diagnostic.trimEnd() + "\n");
+          }
           finish({ ok: false, exitCode: 1 });
           break;
         case "load-failed":

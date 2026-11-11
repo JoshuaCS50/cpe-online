@@ -32,6 +32,8 @@ export interface ConsoleIO {
   /** Shows the typing cursor while a program runs, hides it when idle. */
   setInputActive(active: boolean): void;
   focusInput(): void;
+  /** Adds a ready-made element (for example an error card) after the output so far. */
+  appendElement(node: HTMLElement): void;
 }
 
 // Auto-fold older lines once the output grows past MAX_VISIBLE child nodes
@@ -236,5 +238,6 @@ export function createConsole(elements: ConsoleElements): ConsoleIO {
     bufferedLineCount: () => queue.lineCount(),
     setInputActive,
     focusInput,
+    appendElement: appendNode,
   };
 }

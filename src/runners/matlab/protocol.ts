@@ -22,8 +22,19 @@ export type MatlabWorkerMessage =
   | { type: "stderr"; text: string }
   | { type: "stdin-request" }
   | { type: "done" }
-  | { type: "error"; message: string; line: number | null }
+  | { type: "error"; error: MatlabErrorReport }
   | { type: "load-failed"; message: string };
+
+/** What the runtime reported when a program failed. */
+export interface MatlabErrorReport {
+  /** The runtime's full diagnostic, with the source line and a caret. */
+  diagnostic: string;
+  /** Just the message, for example "undefined variable 'z'". */
+  message: string;
+  identifier?: string;
+  line: number | null;
+  column: number | null;
+}
 
 /** Layout of the vendored runtime; written by scripts/vendor-runmat.mjs. */
 export interface RuntimeManifest {

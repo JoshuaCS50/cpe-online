@@ -11,6 +11,11 @@ export interface CRunOptions {
   consoleIO: ConsoleIO;
   signal?: AbortSignal;
   onErrorLine?: (line: number) => void;
+  /**
+   * Receives the interpreter's raw error text. When given, the runner prints
+   * nothing about the error itself and leaves the explanation to the caller.
+   */
+  onError?: (text: string) => void;
 }
 
 export interface CDebugOptions extends CRunOptions {
@@ -94,6 +99,11 @@ function execute(
         finish({ ok: message.exitCode === 0, exitCode: message.exitCode }, true);
         break;
       case "error": {
+        if (options.onError) {
+          options.onError(message.message);
+          finish({ ok: false, exitCode: -1 }, true);
+          break;
+        }
         const { line, friendly } = explainJSCPPError(message.message);
         if (line) onErrorLine?.(line);
         consoleIO.writeErr(`\n❌ ${line ? `Line ${line} — ` : ""}${friendly}\n`);

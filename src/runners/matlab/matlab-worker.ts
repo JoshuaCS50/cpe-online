@@ -12,7 +12,13 @@
 // Each run gets a fresh session, so variables never leak between runs.
 
 import type { RunMatExecutionError, RunMatSessionHandle } from "runmat";
-import type { MatlabRunRequest, MatlabWorkerMessage, MatlabWorkerRequest, RuntimeManifest } from "./protocol";
+import type {
+  MatlabErrorReport,
+  MatlabRunRequest,
+  MatlabWorkerMessage,
+  MatlabWorkerRequest,
+  RuntimeManifest,
+} from "./protocol";
 
 type RunMatModule = typeof import("runmat");
 
@@ -77,12 +83,22 @@ function waitForLine(): Promise<string | null> {
   });
 }
 
-function describeError(error: unknown): { message: string; line: number | null } {
-  const details = error as Partial<RunMatExecutionError> | null;
+/** The fields shared by a thrown RunMatExecutionError and a result's `error`. */
+type RuntimeError = Pick<RunMatExecutionError, "diagnostic" | "message" | "identifier" | "span">;
+
+function describeError(error: unknown): MatlabErrorReport {
+  const details = error as Partial<RuntimeError> | null;
   if (details && typeof details === "object" && typeof details.diagnostic === "string") {
-    return { message: details.diagnostic, line: details.span?.line ?? null };
+    return {
+      diagnostic: details.diagnostic,
+      message: details.message ?? details.diagnostic,
+      identifier: details.identifier,
+      line: details.span?.line ?? null,
+      column: details.span?.column ?? null,
+    };
   }
-  return { message: error instanceof Error ? error.message : String(error), line: null };
+  const text = error instanceof Error ? error.message : String(error);
+  return { diagnostic: text, message: text, line: null, column: null };
 }
 
 async function run(request: MatlabRunRequest): Promise<void> {
@@ -117,12 +133,12 @@ async function run(request: MatlabRunRequest): Promise<void> {
 
     const result = await session.executeRequest({ source: { kind: "text", name: request.fileName, text: request.code } });
     if (result.error) {
-      post({ type: "error", message: result.error.diagnostic, line: result.error.span?.line ?? null });
+      post({ type: "error", error: describeError(result.error) });
     } else {
       post({ type: "done" });
     }
   } catch (error) {
-    post({ type: "error", ...describeError(error) });
+    post({ type: "error", error: describeError(error) });
   } finally {
     if (subscription !== null) void module.unsubscribeStdout(subscription).catch(() => {});
     session?.dispose();

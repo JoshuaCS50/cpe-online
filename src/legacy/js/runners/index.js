@@ -5,7 +5,7 @@ import { canBlockForInput } from "../../../runners/input-channel";
 import { runCInWorker } from "../../../runners/c/c-runner";
 import { runPythonInWorker } from "../../../runners/python/python-runner";
 
-export async function run({ language, code, consoleIO, signal, onErrorLine }) {
+export async function run({ language, code, consoleIO, signal, onErrorLine, onError }) {
   switch (language) {
     case "c":
     case "cpp":
@@ -15,7 +15,7 @@ export async function run({ language, code, consoleIO, signal, onErrorLine }) {
       // Without it, fall back to the main-thread runner: input must then be
       // queued before the run.
       if (canBlockForInput()) {
-        return runCInWorker({ code, consoleIO, onErrorLine, signal });
+        return runCInWorker({ code, consoleIO, onErrorLine, onError, signal });
       }
       return language === "cpp"
         ? runCpp({ code, consoleIO, signal, onErrorLine })
@@ -24,7 +24,7 @@ export async function run({ language, code, consoleIO, signal, onErrorLine }) {
       // Same idea as C: in a worker, input() pauses for the terminal and
       // Stop can interrupt. The main-thread runner is the fallback.
       if (canBlockForInput()) {
-        return runPythonInWorker({ code, consoleIO, signal, onErrorLine });
+        return runPythonInWorker({ code, consoleIO, signal, onErrorLine, onError });
       }
       return runPython({ code, consoleIO, signal, onErrorLine });
     case "java":
