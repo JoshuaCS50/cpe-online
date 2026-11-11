@@ -13,6 +13,7 @@ import { createSymbolBar } from "../editor/symbol-bar";
 import { STOPPABLE_LANGUAGES, run as runProgram } from "../legacy/js/runners/index.js";
 import { debugCInWorker } from "../runners/c/c-runner";
 import { canBlockForInput } from "../runners/input-channel";
+import { runMatlabInWorker } from "../runners/matlab/matlab-runner";
 import { debugPythonInWorker } from "../runners/python/python-runner";
 import { openStore } from "../storage/idb-store";
 import { migrateLegacyState } from "../storage/migrate-localstorage";
@@ -392,7 +393,7 @@ export async function bootShell(): Promise<void> {
     running = next;
     runButton.disabled = next || workspace.activeFile === null;
     debugButton.disabled = next || !canDebug(workspace.activeFile?.language);
-    stopButton.disabled = !next || !STOPPABLE_LANGUAGES.has(language ?? "");
+    stopButton.disabled = !next || !(STOPPABLE_LANGUAGES.has(language ?? "") || language === "matlab");
     shell.dataset.running = String(next);
     consoleIO.setInputActive(next);
   }
@@ -407,6 +408,8 @@ export async function bootShell(): Promise<void> {
   async function debug(): Promise<void> {
     const file = workspace.activeFile;
     if (running || !file || !canDebug(file.language)) return;
+    // Claim the run before the first await, or a second click could start another.
+    running = true;
     await workspace.flush();
     editor.clearErrorLine();
     consoleIO.clear();
@@ -467,33 +470,24 @@ export async function bootShell(): Promise<void> {
   async function run(): Promise<void> {
     const file = workspace.activeFile;
     if (running || !file) return;
+    // Claim the run before the first await, or a second click could start another.
+    running = true;
     await workspace.flush();
     editor.clearErrorLine();
     consoleIO.clear();
     consoleIO.cancelPendingReads();
     setPanel(true);
     if (root.dataset.tier === "phone") setView("terminal");
-    if (file.language === "matlab") {
-      // Honest placeholder until a MATLAB-compatible runtime is added.
-      consoleIO.writeInfo(
-        "MATLAB files can be written and saved here, but they cannot run in the browser yet.\n" +
-          "To run this file, open it in MATLAB or GNU Octave on a computer.\n",
-      );
-      runChip.textContent = "MATLAB cannot run here yet";
-      return;
-    }
     setRunning(true, file.language);
     runChip.textContent = `Running ${file.name}`;
     abort = new AbortController();
     let outcome = "Finished";
     try {
-      const result = await runProgram({
-        language: file.language,
-        code: file.doc,
-        consoleIO,
-        signal: abort.signal,
-        onErrorLine: (line: number) => editor.highlightErrorLine(line),
-      });
+      const onErrorLine = (line: number): void => editor.highlightErrorLine(line);
+      const result =
+        file.language === "matlab"
+          ? await runMatlabInWorker({ code: file.doc, fileName: file.name, consoleIO, signal: abort.signal, onErrorLine })
+          : await runProgram({ language: file.language, code: file.doc, consoleIO, signal: abort.signal, onErrorLine });
       if ("stopped" in result && result.stopped) outcome = "Stopped";
       else if (!result.ok) outcome = "Failed";
     } catch (error) {

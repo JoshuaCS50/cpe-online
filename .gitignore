@@ -9,6 +9,9 @@ Thumbs.db
 node_modules/
 dist/
 
+# MATLAB runtime, copied from node_modules by scripts/vendor-runmat.mjs
+public/vendor/runmat/
+
 # Logs
 *.log
 npm-debug.log*
