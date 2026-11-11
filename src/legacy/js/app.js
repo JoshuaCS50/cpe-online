@@ -1,5 +1,5 @@
 import { createEditor } from "../../editor/editor";
-import { createConsole } from "./console.js";
+import { createConsole } from "../../terminal/console";
 import {
   loadState,
   saveState,
