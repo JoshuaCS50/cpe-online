@@ -1,4 +1,4 @@
-import { createEditor } from "./editor.js";
+import { createEditor } from "../../editor/editor";
 import { createConsole } from "./console.js";
 import {
   loadState,
@@ -144,20 +144,8 @@ function applySettings() {
   );
   root.classList.add("theme-" + state.settings.theme);
   root.style.setProperty("--editor-fontsize", state.settings.fontSize + "px");
-  if (editor) {
-    const prefersLight =
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: light)").matches;
-    const useLight =
-      state.settings.theme === "light" ||
-      (state.settings.theme === "auto" && prefersLight);
-    // CodeMirror 5 themes: 'default' is light. Otherwise pick a matching dark.
-    let cmTheme;
-    if (useLight) cmTheme = "default";
-    else if (state.settings.theme === "catppuccin") cmTheme = "dracula";
-    else cmTheme = "dracula"; // best built-in approximation of VS Code Dark+
-    editor.setTheme(cmTheme);
-  }
+  // The editor reads its colours from the same CSS variables, so it follows
+  // the theme class set above with no extra work.
   // Update the status-bar online pill colour because palette changed.
   updateStatusBar();
 }
@@ -802,9 +790,9 @@ function updateStatusBar() {
   const langPill = document.getElementById("status-language");
   if (langPill) langPill.textContent = (draft.language || "c").toUpperCase();
   const cursorPill = document.getElementById("status-cursor");
-  if (cursorPill && editor && editor.cm) {
-    const c = editor.cm.getCursor();
-    cursorPill.textContent = "Ln " + (c.line + 1) + ", Col " + (c.ch + 1);
+  if (cursorPill && editor) {
+    const c = editor.getCursor();
+    cursorPill.textContent = "Ln " + c.line + ", Col " + c.col;
   }
   const onlinePill = document.getElementById("status-online");
   const badge = document.getElementById("offline-badge");
@@ -901,6 +889,8 @@ function init() {
     language: getActiveDraft().language,
     wrap: state.settings.wrap,
     fontSize: state.settings.fontSize,
+    // Cursor → status bar
+    onCursor: () => updateStatusBar(),
     onChange: (doc) => {
       const d = getActiveDraft();
       d.doc = doc;
@@ -909,10 +899,8 @@ function init() {
     },
   });
 
-  // Cursor → status bar
-  if (editor.cm) {
-    editor.cm.on("cursorActivity", () => updateStatusBar());
-  }
+  // Handle for manual checks in the dev server console; absent in builds.
+  if (import.meta.env && import.meta.env.DEV) window.__cpe = { editor };
 
   consoleIO = createConsole({
     outputEl: document.getElementById("output"),
