@@ -1,0 +1,11 @@
+# Cloudflare Pages response headers.
+# Cross-origin isolation enables SharedArrayBuffer, which the Python runner
+# and the debugger use to pause and stop code running in a worker.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+
+# The service worker must never be cached by the browser HTTP cache.
+/sw.js
+  Cache-Control: no-cache

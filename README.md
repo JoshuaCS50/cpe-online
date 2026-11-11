@@ -19,51 +19,38 @@ A mobile-friendly web IDE for **C, C++, Python**, and **Java** that runs entirel
 
 ## Quick start
 
-The app is a static site — no build step. Just open `index.html` through any web server.
-
-### Local
+The app is being rebuilt on Vite + TypeScript (see docs/PLAN.md, kept local). The original app runs unchanged from `src/legacy/` while it is replaced module by module.
 
 ```bash
-# any static server works; this repo includes a no-cache one for development
-python .claude/serve.py 8765
-# then open http://localhost:8765
+npm install
+npm run dev        # dev server with hot reload
+npm run build      # typecheck + production build into dist/
+npm run preview    # serve the production build
+npm test           # unit tests (Vitest)
+npm run lint
 ```
 
-### Deploy to GitHub Pages
+### Deploy
 
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/<you>/<repo>.git
-git push -u origin main
-```
-
-Then in your repo's **Settings → Pages**, set the source to `Deploy from branch`, branch `main`, folder `/ (root)`. Your site will be live at `https://<you>.github.io/<repo>/`.
+Static output in `dist/`. Target host is Cloudflare Pages (build command `npm run build`, output directory `dist`). `public/_headers` sends the cross-origin isolation headers the Python runner and debugger rely on.
 
 ## Project layout
 
 ```
 .
-├── index.html              # app shell, toolbar, layout
-├── manifest.webmanifest    # PWA metadata
-├── sw.js                   # service worker (offline caching)
-├── css/
-│   └── app.css             # mobile-first stylesheet
-├── js/
-│   ├── app.js              # bootstrap & UI wiring
-│   ├── editor.js           # CodeMirror wrapper
-│   ├── console.js          # output panel + stdin
-│   ├── storage.js          # localStorage + file save/open
-│   ├── examples.js         # starter programs
-│   └── runners/
-│       ├── index.js        # language dispatch
-│       ├── c.js            # C / C++ runner (JSCPP)
-│       ├── python.js       # Python runner (Pyodide, lazy-loaded)
-│       └── java.js         # Java placeholder ("coming soon")
-├── vendor/
-│   └── JSCPP.es5.min.js    # vendored interpreter for offline reliability
-└── README.md
+├── index.html                 # Vite entry: app shell markup
+├── vite.config.ts             # build, dev headers, Vitest config
+├── public/
+│   ├── _headers               # Cloudflare Pages headers (COOP/COEP)
+│   ├── manifest.webmanifest   # PWA metadata
+│   ├── sw.js                  # service worker (offline caching)
+│   └── vendor/JSCPP.es5.min.js
+├── src/
+│   ├── main.ts                # entry; boots the legacy app for now
+│   └── legacy/                # original app, being ported to TypeScript
+│       ├── css/app.css
+│       └── js/                # app, editor, console, storage, runners, ...
+└── tests/unit/                # Vitest tests
 ```
 
 ## How offline works

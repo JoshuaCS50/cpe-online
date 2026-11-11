@@ -2,28 +2,16 @@
 // Precaches the app shell and caches third-party libraries on first use so the
 // app works fully offline after the first successful load.
 
-const VERSION = "cpe-online-v7";
+const VERSION = "cpe-online-v8";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
+// Built assets have hashed names, so only stable URLs are listed here. The
+// fetch handler below caches every other same-origin file on first use.
 const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./css/app.css",
-  "./js/app.js",
-  "./js/editor.js",
-  "./js/console.js",
-  "./js/storage.js",
-  "./js/examples.js",
-  "./js/cheatsheet.js",
-  "./js/zip.js",
-  "./js/runners/index.js",
-  "./js/runners/c.js",
-  "./js/runners/c-streaming.js",
-  "./js/runners/c-worker.js",
-  "./js/runners/python.js",
-  "./js/runners/java.js",
   "./vendor/JSCPP.es5.min.js",
 ];
 

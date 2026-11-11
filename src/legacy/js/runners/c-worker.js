@@ -8,7 +8,9 @@
 // more, it gets EOF. For interactive scanf, the main-thread runner with
 // window.prompt() is the right tool.
 
-importScripts("../../vendor/JSCPP.es5.min.js");
+// The page passes the absolute JSCPP URL as the worker name, because the
+// bundled worker no longer sits at a fixed path relative to /vendor.
+importScripts(self.name || "../../vendor/JSCPP.es5.min.js");
 
 // JSCPP's preprocessor strips spaces after commas inside string literals.
 // Mirror the workaround from c.js so behavior is identical between modes.

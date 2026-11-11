@@ -886,6 +886,8 @@ function wireDivider() {
 function registerSW() {
   if (!("serviceWorker" in navigator)) return;
   if (location.protocol !== "http:" && location.protocol !== "https:") return;
+  // The cache-first worker would serve stale modules under the Vite dev server.
+  if (import.meta.env && import.meta.env.DEV) return;
   navigator.serviceWorker.register("sw.js").catch((err) => {
     console.warn("SW registration failed:", err);
   });

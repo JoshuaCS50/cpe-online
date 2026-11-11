@@ -12,7 +12,11 @@ function getWorker() {
     // Old worker still running — terminate so we can start fresh.
     cachedWorker.terminate();
   }
-  cachedWorker = new Worker(new URL("./c-worker.js", import.meta.url), { type: "classic" });
+  const jscppUrl = new URL("vendor/JSCPP.es5.min.js", document.baseURI).href;
+  cachedWorker = new Worker(new URL("./c-worker.js", import.meta.url), {
+    type: "classic",
+    name: jscppUrl,
+  });
   cachedWorkerBusy = false;
   return cachedWorker;
 }
