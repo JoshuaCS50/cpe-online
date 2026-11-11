@@ -759,3 +759,178 @@ input {
 :root[data-tier="phone"] .shell[data-view="terminal"] .panel {
   display: grid;
 }
+
+/* ───── Debugger ───── */
+
+.debug-controls {
+  display: none;
+  gap: 2px;
+}
+
+.shell[data-debugging="true"] .debug-controls {
+  display: flex;
+}
+
+.shell[data-debugging="true"] .btn-run,
+.shell[data-debugging="true"] .btn-debug {
+  display: none;
+}
+
+.btn-step {
+  color: var(--accent);
+}
+
+.btn-step:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.debug-pane {
+  display: none;
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--bg-2);
+  font-size: var(--fs-sm);
+}
+
+.shell[data-debugging="true"] .panel-body {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 40%);
+}
+
+.shell[data-debugging="true"] .debug-pane {
+  display: block;
+}
+
+.debug-status {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.shell[data-paused="true"] .debug-status {
+  box-shadow: inset 2px 0 0 #ffcc00;
+}
+
+.debug-empty {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  color: var(--ink-faint);
+}
+
+.debug-frame {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  width: 100%;
+  min-height: max(28px, var(--tap));
+  padding: 0 var(--s-3);
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-3);
+  color: var(--ink-dim);
+  cursor: pointer;
+  text-align: left;
+}
+
+.debug-frame.is-static {
+  align-items: center;
+  cursor: default;
+}
+
+.debug-section:first-child .debug-frame {
+  border-top: 0;
+}
+
+.debug-section.is-current .debug-frame-name {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.debug-frame-line {
+  color: var(--ink-faint);
+  font-size: var(--fs-xs);
+}
+
+.debug-vars {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px var(--s-3);
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+}
+
+.debug-vars dt {
+  color: var(--ink-dim);
+}
+
+.debug-vars dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+/* A value that differs from the previous pause. */
+.debug-vars dd.is-changed {
+  color: var(--warn);
+  font-weight: 650;
+}
+
+/* Phone: while debugging, variables sit under the code; the terminal keeps its own screen. */
+:root[data-tier="phone"] .btn-debug .btn-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+:root[data-tier="phone"] .btn-debug {
+  width: var(--tap);
+  padding: 0;
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"] .title-path {
+  display: none;
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"] .title-actions {
+  margin-left: auto;
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"] .panel-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"][data-view="terminal"] .debug-pane {
+  display: none;
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"][data-view="code"] .main {
+  grid-template-rows: minmax(0, 1fr) 42%;
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"][data-view="code"] .panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"][data-view="code"] .panel-header,
+:root[data-tier="phone"] .shell[data-debugging="true"][data-view="code"] .output {
+  display: none;
+}
+
+:root[data-tier="phone"] .shell[data-debugging="true"][data-view="code"] .debug-pane {
+  border-left: 0;
+}

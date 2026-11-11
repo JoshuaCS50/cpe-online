@@ -24,3 +24,12 @@ Known gaps to cover in the adapter (P1-21):
 ## Python
 
 Open. Candidates and the test that decides between them are in the plan (section 10.1, row 2; spike P1-17a).
+
+### C / C++: as built
+
+- `src/debugger/c-stepper.ts` drives the JSCPP debugger and is tested in Node against the real interpreter (`tests/unit/c-stepper.test.ts`).
+- Call stack: `rt.scope` entries carry `$name`; those starting with `function ` are frames. Call-site lines are recorded by the stepper each time the depth grows, since JSCPP does not keep them.
+- Variables per frame: `dbg.variable()` formats values well but flattens every scope, so the stepper temporarily narrows `rt.scope` to one frame's scopes before calling it.
+- Stops are line-level: a stop needs the line or the call depth to change, so a breakpoint on a one-line loop pauses once.
+- The worker is a module worker (`src/runners/c/c-worker.ts`). JSCPP is a classic script, so it is fetched and evaluated in the worker's global scope.
+- Stepping runs synchronously inside one message handler. A program that never reaches a stop is ended by terminating the worker.

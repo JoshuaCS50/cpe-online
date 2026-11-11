@@ -5,10 +5,13 @@
 import "../theme/tokens.css";
 import "./shell.css";
 
+import { createDebugView } from "../debugger/debug-view";
+import type { DebugCommand, DebugSession } from "../debugger/types";
 import { createEditor } from "../editor/editor";
 import type { EditorHandle } from "../editor/editor";
 import { createSymbolBar } from "../editor/symbol-bar";
 import { STOPPABLE_LANGUAGES, run as runProgram } from "../legacy/js/runners/index.js";
+import { debugCInWorker } from "../runners/c/c-runner";
 import { openStore } from "../storage/idb-store";
 import { migrateLegacyState } from "../storage/migrate-localstorage";
 import { createConsole } from "../terminal/console";
@@ -44,9 +47,23 @@ export async function bootShell(): Promise<void> {
   const pathEl = el("span", { class: "title-path" });
   const runButton = button({ label: "Run", icon: "play", showLabel: true, class: "btn btn-run", onClick: () => void run() });
   const stopButton = button({ label: "Stop", icon: "stop", showLabel: true, class: "btn btn-stop", onClick: () => stop() });
+  const debugButton = button({ label: "Debug", icon: "bug", showLabel: true, class: "btn btn-outline btn-debug", onClick: () => void debug() });
   runButton.title = "Run (F5)";
+  debugButton.title = "Debug: run and pause at breakpoints (F6)";
   stopButton.title = "Stop (Shift+F5)";
   stopButton.disabled = true;
+
+  // Shown only while a debug session is active; enabled only while paused.
+  const stepButton = (label: string, iconName: "resume" | "stepOver" | "stepInto" | "stepOut", command: DebugCommand): HTMLButtonElement =>
+    button({ label, icon: iconName, class: "btn btn-icon btn-step", onClick: () => session?.command(command) });
+  const stepButtons = [
+    stepButton("Continue (F5)", "resume", "continue"),
+    stepButton("Step over (F10)", "stepOver", "stepOver"),
+    stepButton("Step into (F11)", "stepInto", "stepInto"),
+    stepButton("Step out (Shift+F11)", "stepOut", "stepOut"),
+  ];
+  for (const node of stepButtons) node.disabled = true;
+  const debugControls = el("div", { class: "debug-controls", role: "toolbar", "aria-label": "Debugger" }, stepButtons);
 
   const titleBar = el("header", { class: "titlebar" }, [
     el("span", { class: "brand" }, [
@@ -54,7 +71,7 @@ export async function bootShell(): Promise<void> {
       el("span", { class: "brand-name" }, ["cpe-online"]),
     ]),
     pathEl,
-    el("div", { class: "title-actions" }, [runButton, stopButton]),
+    el("div", { class: "title-actions" }, [runButton, debugButton, debugControls, stopButton]),
   ]);
 
   const explorerToggle = button({
@@ -104,6 +121,7 @@ export async function bootShell(): Promise<void> {
   });
 
   const outputEl = el("pre", { class: "output", role: "log", "aria-live": "polite", "aria-label": "Terminal output" });
+  const debugPane = el("aside", { class: "debug-pane", "aria-label": "Debugger" });
   const panel = el("section", { class: "panel", "aria-label": "Terminal" }, [
     el("div", { class: "panel-header" }, [
       el("span", { class: "panel-title" }, ["Terminal"]),
@@ -112,7 +130,7 @@ export async function bootShell(): Promise<void> {
         button({ label: "Clear terminal", icon: "eraser", class: "btn btn-icon btn-quiet", onClick: () => consoleIO.clear() }),
       ]),
     ]),
-    outputEl,
+    el("div", { class: "panel-body" }, [outputEl, debugPane]),
   ]);
 
   const main = el("main", { class: "main" }, [editorPane, splitter, panel]);
@@ -219,6 +237,24 @@ export async function bootShell(): Promise<void> {
     onCursor: ({ line, col }) => {
       cursorChip.textContent = `Ln ${line}, Col ${col}`;
     },
+    onBreakpointsChange: (lines) => {
+      if (loading || loadedFileId === null) return;
+      breakpointsByFile.set(loadedFileId, lines);
+      if (session && loadedFileId === debugFileId) session.setBreakpoints(lines);
+    },
+  });
+
+  /** Breakpoints live per file for this visit. */
+  const breakpointsByFile = new Map<string, number[]>();
+  let session: DebugSession | null = null;
+  let debugFileId: string | null = null;
+  let pausedLine: number | null = null;
+
+  const debugView = createDebugView(debugPane, {
+    onRevealLine: (line) => {
+      if (debugFileId !== null) workspace.open(debugFileId);
+      editor.setExecLine(line);
+    },
   });
   const symbolBar = createSymbolBar(symbolsEl, () => (loadedFileId === null ? null : editor));
 
@@ -235,6 +271,7 @@ export async function bootShell(): Promise<void> {
     const file = workspace.activeFile;
     editorPane.classList.toggle("is-empty", file === null);
     runButton.disabled = running || file === null;
+    debugButton.disabled = running || !canDebug(file?.language);
     if (!file) {
       loadedFileId = null;
       pathEl.textContent = "";
@@ -248,7 +285,10 @@ export async function bootShell(): Promise<void> {
       loading = true;
       loadedFileId = file.id;
       editor.setDoc(file.doc);
+      editor.setBreakpoints(breakpointsByFile.get(file.id) ?? []);
       loading = false;
+      // The paused-line marker belongs to the file being debugged.
+      editor.setExecLine(file.id === debugFileId ? pausedLine : null);
     }
     // Renaming a file can change its language without changing the file.
     editor.setLanguage(file.language);
@@ -260,12 +300,84 @@ export async function bootShell(): Promise<void> {
   let running = false;
   let abort: AbortController | null = null;
 
+  /** Step debugging exists for C and C++ so far. */
+  function canDebug(language: string | undefined): boolean {
+    return language === "c" || language === "cpp";
+  }
+
   function setRunning(next: boolean, language?: string): void {
     running = next;
     runButton.disabled = next || workspace.activeFile === null;
+    debugButton.disabled = next || !canDebug(workspace.activeFile?.language);
     stopButton.disabled = !next || !STOPPABLE_LANGUAGES.has(language ?? "");
     shell.dataset.running = String(next);
     consoleIO.setInputActive(next);
+  }
+
+  function setPaused(line: number | null): void {
+    pausedLine = line;
+    shell.dataset.paused = String(line !== null);
+    for (const node of stepButtons) node.disabled = line === null;
+    if (loadedFileId === debugFileId) editor.setExecLine(line);
+  }
+
+  async function debug(): Promise<void> {
+    const file = workspace.activeFile;
+    if (running || !file || !canDebug(file.language)) return;
+    await workspace.flush();
+    editor.clearErrorLine();
+    consoleIO.clear();
+    consoleIO.cancelPendingReads();
+    setPanel(true);
+    setRunning(true, file.language);
+    shell.dataset.debugging = "true";
+    debugFileId = file.id;
+    // Line numbers must keep meaning what they meant when the program started.
+    editor.setReadOnly(true);
+    setPaused(null);
+    debugView.showRunning();
+    runChip.textContent = `Debugging ${file.name}`;
+
+    const phone = (): boolean => root.dataset.tier === "phone";
+    session = debugCInWorker({
+      code: file.doc,
+      // On a phone the terminal is a separate screen: go there when the
+      // program asks for input, and come back to the code when it pauses.
+      consoleIO: {
+        ...consoleIO,
+        readLine: () => {
+          if (phone()) setView("terminal");
+          return consoleIO.readLine();
+        },
+      },
+      breakpoints: breakpointsByFile.get(file.id) ?? [],
+      onErrorLine: (line) => editor.highlightErrorLine(line),
+      listener: {
+        onPaused: (state) => {
+          if (workspace.activeFile?.id !== debugFileId && debugFileId !== null) workspace.open(debugFileId);
+          if (phone()) setView("code");
+          setPaused(state.line);
+          debugView.showPaused(state);
+          runChip.textContent = `Paused at line ${state.line}`;
+        },
+        onResumed: () => {
+          setPaused(null);
+          debugView.showRunning();
+          runChip.textContent = `Debugging ${file.name}`;
+        },
+      },
+    });
+
+    const result = await session.finished;
+    session = null;
+    setPaused(null);
+    debugFileId = null;
+    editor.setReadOnly(false);
+    shell.dataset.debugging = "false";
+    debugView.reset();
+    setRunning(false);
+    consoleIO.resetInput();
+    runChip.textContent = result.stopped ? "Stopped" : result.ok ? "Finished" : "Failed";
   }
 
   async function run(): Promise<void> {
@@ -289,8 +401,8 @@ export async function bootShell(): Promise<void> {
         signal: abort.signal,
         onErrorLine: (line: number) => editor.highlightErrorLine(line),
       });
-      if (result?.stopped) outcome = "Stopped";
-      else if (!result?.ok) outcome = "Failed";
+      if ("stopped" in result && result.stopped) outcome = "Stopped";
+      else if (!result.ok) outcome = "Failed";
     } catch (error) {
       consoleIO.writeErr("\n" + (error instanceof Error ? error.message : String(error)) + "\n");
       outcome = "Failed";
@@ -306,6 +418,7 @@ export async function bootShell(): Promise<void> {
     if (!running) return;
     consoleIO.cancelPendingReads(new Error("Stopped by user"));
     abort?.abort();
+    session?.stop();
     consoleIO.writeInfo("\n[stopped]\n");
   }
 
@@ -342,7 +455,18 @@ export async function bootShell(): Promise<void> {
       stop();
     } else if (event.key === "F5" || (command && event.key === "Enter")) {
       event.preventDefault();
-      void run();
+      // While paused in the debugger, F5 means "carry on".
+      if (session) session.command("continue");
+      else void run();
+    } else if (event.key === "F6") {
+      event.preventDefault();
+      void debug();
+    } else if (event.key === "F10" && session) {
+      event.preventDefault();
+      session.command("stepOver");
+    } else if (event.key === "F11" && session) {
+      event.preventDefault();
+      session.command(event.shiftKey ? "stepOut" : "stepInto");
     } else if (command && event.key.toLowerCase() === "b") {
       event.preventDefault();
       toggleSidebar();

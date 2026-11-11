@@ -56,6 +56,8 @@ export interface EditorHandle {
   setLanguage(language: EditorLanguage | string): void;
   setWrap(wrap: boolean): void;
   setFontSize(px: number): void;
+  /** Blocks typing, for example while the debugger is using the line numbers. */
+  setReadOnly(readOnly: boolean): void;
   focus(): void;
   /** Inserts text at the selection; `cursorOffset` then moves the cursor (for example -1 lands between `{}`). */
   insertText(text: string, cursorOffset?: number): void;
@@ -226,6 +228,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
 
   const languageCompartment = new Compartment();
   const wrapCompartment = new Compartment();
+  const readOnlyCompartment = new Compartment();
 
   const listener = EditorView.updateListener.of((update) => {
     if (update.docChanged) onChange?.(update.state.doc.toString());
@@ -263,6 +266,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
       }),
       languageCompartment.of(isBundled(language) ? cpp() : []),
       wrapCompartment.of(wrap ? EditorView.lineWrapping : []),
+      readOnlyCompartment.of(EditorState.readOnly.of(false)),
       syntaxHighlighting(highlightStyle),
       baseTheme,
       errorLineField,
@@ -317,6 +321,9 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     setLanguage: applyLanguage,
     setWrap(next) {
       view.dispatch({ effects: wrapCompartment.reconfigure(next ? EditorView.lineWrapping : []) });
+    },
+    setReadOnly(readOnly) {
+      view.dispatch({ effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly)) });
     },
     setFontSize(px) {
       parent.style.setProperty("--editor-fontsize", `${px}px`);

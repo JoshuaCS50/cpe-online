@@ -122,6 +122,29 @@ export function runCInteractive(code: string, lines: readonly string[]): Interac
   return { stdout, requests, unused: remaining };
 }
 
+/**
+ * Starts `code` under JSCPP's debugger and returns the raw debugger object
+ * plus a way to read what the program has printed so far.
+ */
+export function debugC(code: string, lines: readonly string[] = []): { debuggerObject: unknown; stdout: () => string } {
+  const jscpp = loadJscpp();
+  const remaining = [...lines];
+  let stdout = "";
+  const debuggerObject = jscpp.run(code, "", {
+    debug: true,
+    stdio: {
+      write: (text: string) => {
+        stdout += text;
+      },
+      drain: () => {
+        const next = remaining.shift();
+        return next === undefined ? null : next + "\n";
+      },
+    },
+  });
+  return { debuggerObject, stdout: () => stdout };
+}
+
 /** The untranslated JSCPP error message for `code`, or null if it runs cleanly. */
 export function rawJscppError(code: string, stdin = ""): string | null {
   const jscpp = loadJscpp();

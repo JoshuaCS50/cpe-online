@@ -1,8 +1,8 @@
 import { runC, runCpp } from "./c.js";
-import { runCStreaming } from "./c-streaming.js";
 import { runPython } from "./python.js";
 import { runJava } from "./java.js";
 import { canBlockForInput } from "../../../runners/input-channel";
+import { runCInWorker } from "../../../runners/c/c-runner";
 import { runPythonInWorker } from "../../../runners/python/python-runner";
 
 export async function run({ language, code, consoleIO, signal, onErrorLine }) {
@@ -15,7 +15,7 @@ export async function run({ language, code, consoleIO, signal, onErrorLine }) {
       // Without it, fall back to the main-thread runner: input must then be
       // queued before the run.
       if (canBlockForInput()) {
-        return runCStreaming({ code, consoleIO, onErrorLine, signal });
+        return runCInWorker({ code, consoleIO, onErrorLine, signal });
       }
       return language === "cpp"
         ? runCpp({ code, consoleIO, signal, onErrorLine })
