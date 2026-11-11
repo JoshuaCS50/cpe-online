@@ -13,5 +13,8 @@ dist/
 *.log
 npm-debug.log*
 
+# Brief copied into the sandbox clone for a hosted-model run
+/BRIEF.md
+
 # Plan file (kept local)
 plan.md

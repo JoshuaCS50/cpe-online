@@ -28,6 +28,15 @@ if (!existsSync(join(worktree, "opencode.json"))) {
   process.exit(2);
 }
 
+// The sandbox must be a standalone clone. opencode resolves a linked git
+// worktree back to the main checkout and edits files there instead.
+const gitDir = spawnSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: worktree, encoding: "utf8" });
+const expectedGitDir = join(worktree, ".git").replace(/\\/g, "/").toLowerCase();
+if (gitDir.status !== 0 || gitDir.stdout.trim().replace(/\\/g, "/").toLowerCase() !== expectedGitDir) {
+  console.error(`${worktree} is not a standalone clone (git dir: ${gitDir.stdout.trim()}). Use "git clone", not "git worktree add".`);
+  process.exit(2);
+}
+
 const scan = spawnSync(process.execPath, [resolve("scripts/brief-scan.mjs"), brief], { stdio: "inherit" });
 if (scan.status !== 0) process.exit(scan.status ?? 1);
 
@@ -38,9 +47,15 @@ const message =
   "Touch only the files it lists. Do not edit BRIEF.md. Do not commit.";
 const title = basename(brief).replace(/\.md$/, "");
 
-const run = spawnSync("opencode", ["run", "-m", model, "--title", title, `"${message}"`], {
+const run = spawnSync("opencode", ["run", "--standalone", "-m", model, "--title", title, `"${message}"`], {
   cwd: worktree,
+  // opencode takes its project directory from PWD when a POSIX shell set it,
+  // so it must point at the sandbox too, not at the caller's directory.
+  env: { ...process.env, PWD: worktree, INIT_CWD: worktree },
   stdio: "inherit",
   shell: true,
 });
+
+console.log("\n--- files changed in sandbox ---");
+spawnSync("git", ["status", "--short"], { cwd: worktree, stdio: "inherit" });
 process.exit(run.status ?? 1);

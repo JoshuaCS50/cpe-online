@@ -22,7 +22,7 @@ Numbered, testable rules. Point at an existing file to read when behaviour must 
 List each test case by name and what it asserts.
 
 ## Acceptance
-Commands that must pass, run from the repository root.
+Commands that must pass, run from the repository root. Run each command exactly as written: no pipes, no redirection, no extra flags (the sandbox denies anything else).
 
 ## Constraints
 - TypeScript strict mode. No `any`, no `@ts-ignore`, no non-null `!` unless explained in a comment.
