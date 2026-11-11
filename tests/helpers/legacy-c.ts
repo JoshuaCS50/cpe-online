@@ -88,6 +88,40 @@ export async function runLegacyC(code: string, stdin = ""): Promise<LegacyRun> {
   };
 }
 
+export interface InteractiveRun {
+  stdout: string;
+  /** How many times the program asked the host for more input. */
+  requests: number;
+  /** Lines that were never asked for. */
+  unused: string[];
+}
+
+/**
+ * Runs `code` with input supplied one line per request, the way the terminal
+ * does: nothing is available up front, and each request hands over the next
+ * entry of `lines` (a newline is appended). When `lines` runs out, requests
+ * get end-of-input.
+ */
+export function runCInteractive(code: string, lines: readonly string[]): InteractiveRun {
+  const jscpp = loadJscpp();
+  const remaining = [...lines];
+  let stdout = "";
+  let requests = 0;
+  jscpp.run(code, "", {
+    stdio: {
+      write: (text: string) => {
+        stdout += text;
+      },
+      drain: () => {
+        requests += 1;
+        const next = remaining.shift();
+        return next === undefined ? null : next + "\n";
+      },
+    },
+  });
+  return { stdout, requests, unused: remaining };
+}
+
 /** The untranslated JSCPP error message for `code`, or null if it runs cleanly. */
 export function rawJscppError(code: string, stdin = ""): string | null {
   const jscpp = loadJscpp();

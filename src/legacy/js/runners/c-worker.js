@@ -2,11 +2,10 @@
 // in via postMessage, so the user gets progressive output instead of
 // everything at once at the end of a synchronous run.
 //
-// Limitation: workers can't synchronously block on user input without
-// SharedArrayBuffer (which needs cross-origin isolation). For now this
-// runner consumes a fixed `stdin` provided up-front; if JSCPP requests
-// more, it gets EOF. For interactive scanf, the main-thread runner with
-// window.prompt() is the right tool.
+// Input: lines queued before the run are consumed first. When the program
+// reads more, the worker blocks on a SharedArrayBuffer until the user types
+// a line in the terminal (needs cross-origin isolation). Without a shared
+// buffer the program gets end of input instead.
 
 // The page passes the absolute JSCPP URL as the worker name, because the
 // bundled worker no longer sits at a fixed path relative to /vendor.
@@ -81,11 +80,24 @@ function escapeSpacesInStringLiterals(src) {
   return out;
 }
 
+// Sleeps until the page answers with a line of input. Returns the line, or
+// null for end of input. Buffer layout: see src/runners/input-channel.ts.
+function waitForLine(channel) {
+  const header = new Int32Array(channel, 0, 2);
+  Atomics.store(header, 0, 0);
+  self.postMessage({ type: "stdin-request" });
+  Atomics.wait(header, 0, 0);
+  if (Atomics.load(header, 0) !== 1) return null;
+  // Copy out of shared memory: TextDecoder cannot read it directly.
+  const bytes = new Uint8Array(channel, 8, Atomics.load(header, 1)).slice();
+  return new TextDecoder().decode(bytes);
+}
+
 self.onmessage = (e) => {
   if (!e.data || e.data.type !== "run") return;
-  const { code, stdin } = e.data;
+  const { code, stdin, input } = e.data;
 
-  let remainingStdin = String(stdin || "");
+  let queued = String(stdin || "");
   const config = {
     stdio: {
       // Each character/string write becomes a postMessage so the main
@@ -93,22 +105,25 @@ self.onmessage = (e) => {
       write: (s) => {
         self.postMessage({ type: "stdout", text: s });
       },
+      // The patched JSCPP build calls this each time the program reads and
+      // its buffer is empty. Input queued before the run goes first; after
+      // that the program waits for the user to type a line in the terminal.
+      drain: () => {
+        if (queued) {
+          const out = queued;
+          queued = "";
+          return out;
+        }
+        return input ? waitForLine(input) : null;
+      },
     },
     unsigned_overflow: "warn",
-    maxTimeout: 30000,
     includes: {},
-    getInput: () => {
-      // Worker mode is non-interactive: hand JSCPP whatever's left, then EOF.
-      const out = remainingStdin;
-      remainingStdin = "";
-      return out;
-    },
   };
 
   try {
     const patched = escapeSpacesInStringLiterals(code);
-    const exitCode = self.JSCPP.run(patched, remainingStdin, config);
-    remainingStdin = ""; // JSCPP consumed the up-front stdin
+    const exitCode = self.JSCPP.run(patched, "", config);
     self.postMessage({ type: "done", exitCode });
   } catch (err) {
     self.postMessage({

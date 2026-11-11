@@ -82,9 +82,9 @@
 
     <div class="divider" id="divider" role="separator" aria-orientation="horizontal" aria-label="Resize editor and output" tabindex="0"></div>
 
-    <section class="output-pane" aria-label="Program output">
+    <section class="output-pane" aria-label="Terminal">
       <div class="output-header">
-        <span>Output</span>
+        <span>Terminal</span>
         <div class="output-header-actions">
           <button id="copy-output" class="text-button" aria-label="Copy output to clipboard" title="Copy the entire output to your clipboard so you can paste it into a chat or assignment.">📋 Copy</button>
           <button id="clear-output" class="text-button" aria-label="Clear output">Clear</button>
@@ -92,17 +92,12 @@
       </div>
       <pre id="output" class="output" aria-live="polite" aria-atomic="false"></pre>
       <div id="stdin-queue" class="stdin-queue" hidden role="status" aria-live="polite"></div>
-      <form id="stdin-form" class="stdin-row" autocomplete="off">
-        <label class="stdin-label" for="stdin-input" title="If your C program uses scanf, type the input here BEFORE pressing Run. Multiple values? Separate them with new lines (paste them) or send several times.">Input&nbsp;⮕</label>
-        <input id="stdin-input" class="stdin-input" type="text" inputmode="text" placeholder="Type input here, press Send — then ▶ Run" />
-        <button type="submit" class="text-button">Send</button>
-      </form>
     </section>
   </main>
 
   <footer class="action-bar" role="toolbar" aria-label="Main actions">
-    <button id="run-button" class="action-btn action-btn--primary" aria-label="Run program" title="Run the current file. Toggle 'Stream output (live)' in the menu for live output, or leave it off for interactive scanf prompts.">
-      <span aria-hidden="true">▶</span> Run<span id="run-mode-badge" class="run-mode-badge" hidden></span>
+    <button id="run-button" class="action-btn action-btn--primary" aria-label="Run program" title="Run the current file. When the program asks for input, type it in the terminal and press Enter.">
+      <span aria-hidden="true">▶</span> Run
     </button>
     <button id="stop-button" class="action-btn" aria-label="Stop running program" disabled>
       <span aria-hidden="true">■</span> Stop
@@ -139,8 +134,8 @@
       <div id="drafts-list" class="drafts-list"></div>
     </div>
     <div class="menu-section">
-      <div class="menu-heading">Inputs (one per line)</div>
-      <p class="menu-hint">Type all the values your program needs (one per line), then tap <strong>Queue all</strong>. They'll be fed to <code>scanf</code> / <code>cin</code> in order when you Run.</p>
+      <div class="menu-heading">Prepared inputs (optional)</div>
+      <p class="menu-hint">Normally you type input in the terminal when the program asks. To re-run a program without retyping, list its answers here (one per line) and tap <strong>Queue all</strong>; they are fed to <code>scanf</code> / <code>cin</code> in order on the next Run.</p>
       <textarea id="inputs-textarea" class="inputs-textarea" rows="4" spellcheck="false" placeholder="e.g.&#10;5&#10;10&#10;Joshua"></textarea>
       <div class="inputs-actions">
         <button id="inputs-queue" class="text-button">Queue all</button>
@@ -177,10 +172,6 @@
       <label class="menu-field menu-field--row" title="ON = long output lines wrap to fit the panel width. OFF = swipe horizontally to read long lines.">
         <span>Wrap long lines (output)</span>
         <input id="output-wrap" type="checkbox" />
-      </label>
-      <label class="menu-field menu-field--row" title="When ON, output appears as printf runs (good for finding where a program crashes). When OFF, you can interactively answer scanf prompts mid-run.">
-        <span>Stream output (live)</span>
-        <input id="streaming-mode" type="checkbox" />
       </label>
     </div>
     <div class="menu-footer">
@@ -225,8 +216,8 @@
       <p class="qs-lead">A C / C++ / Python IDE that runs on your phone — <strong>no internet needed after the first visit</strong>.</p>
       <ol class="qs-steps">
         <li><strong>Edit your code</strong> in the editor. Tap the symbol bar above the keyboard for <code>{ } ; ( )</code> etc.</li>
-        <li><strong>Need input?</strong> Type it into the <em>Input</em> row at the bottom of the Output panel <em>before</em> pressing Run (for C / C++).</li>
-        <li><strong>Tap ▶ Run</strong> to compile and run. Output appears in the bottom panel.</li>
+        <li><strong>Tap ▶ Run</strong> to compile and run. Output appears in the <em>Terminal</em> panel.</li>
+        <li><strong>Program asks for input?</strong> Tap the terminal, type your answer, press Enter, just like a desktop IDE.</li>
         <li><strong>Save</strong> downloads your file as <code>.c</code>, <code>.cpp</code>, <code>.py</code>, or <code>.java</code>. <strong>Open</strong> brings them back.</li>
       </ol>
       <p class="qs-tip">💡 Tap the <strong>☰</strong> menu for examples, snippets, themes, and the full help.</p>

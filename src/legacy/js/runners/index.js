@@ -2,16 +2,19 @@ import { runC, runCpp } from "./c.js";
 import { runCStreaming } from "./c-streaming.js";
 import { runPython } from "./python.js";
 import { runJava } from "./java.js";
+import { canBlockForInput } from "../../../runners/input-channel";
 
-export async function run({ language, code, consoleIO, signal, onErrorLine, streaming }) {
+export async function run({ language, code, consoleIO, signal, onErrorLine }) {
   switch (language) {
     case "c":
     case "cpp":
-      // Streaming mode: Web Worker, output appears progressively, no
-      // interactive scanf prompts (input must be pre-queued).
-      // Sync mode: main-thread JSCPP, prompt() per scanf for missing input.
-      if (streaming) {
-        return runCStreaming({ code, consoleIO, onErrorLine });
+      // Normal path: run in a Web Worker. Output appears as it is printed,
+      // scanf / cin pause for the user to type in the terminal, and Stop can
+      // end the program. This needs shared memory (cross-origin isolation).
+      // Without it, fall back to the main-thread runner: input must then be
+      // queued before the run.
+      if (canBlockForInput()) {
+        return runCStreaming({ code, consoleIO, onErrorLine, signal });
       }
       return language === "cpp"
         ? runCpp({ code, consoleIO, signal, onErrorLine })
@@ -26,8 +29,7 @@ export async function run({ language, code, consoleIO, signal, onErrorLine, stre
   }
 }
 
-// Async runners we can actually interrupt via the Stop button.
-export const ASYNC_LANGUAGES = new Set(["python"]);
-
-// Languages where streaming mode is supported.
-export const STREAMABLE_LANGUAGES = new Set(["c", "cpp"]);
+// Languages the Stop button can end.
+export const STOPPABLE_LANGUAGES = new Set(
+  canBlockForInput() ? ["python", "c", "cpp"] : ["python"]
+);

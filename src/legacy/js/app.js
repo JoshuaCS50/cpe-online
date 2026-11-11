@@ -18,8 +18,7 @@ import {
 import { createZip } from "../../storage/zip";
 import {
   run as runProgram,
-  ASYNC_LANGUAGES,
-  STREAMABLE_LANGUAGES,
+  STOPPABLE_LANGUAGES,
 } from "./runners/index.js";
 
 // Common code snippets, language-aware. { label, langs, text, cursor? }.
@@ -237,7 +236,6 @@ function activateDraft(id) {
   renderDraftTabs();
   renderDraftsList();
   renderSnippets();
-  updateRunModeBadge();
   updateStatusBar();
   persist();
 }
@@ -329,6 +327,9 @@ function renameActive() {
 
 // ───── Run / Stop ─────
 
+// Aborting this ends the program started by the current run.
+let runAbort = null;
+
 async function runCode() {
   const draft = getActiveDraft();
   draft.doc = editor.getDoc();
@@ -337,20 +338,19 @@ async function runCode() {
   consoleIO.clear();
   consoleIO.cancelPendingReads();
   setRunning(true, draft.language);
+  runAbort = new AbortController();
   try {
-    const useStreaming =
-      !!state.settings.streamingMode &&
-      STREAMABLE_LANGUAGES.has(draft.language);
     await runProgram({
       language: draft.language,
       code: draft.doc,
       consoleIO,
-      streaming: useStreaming,
+      signal: runAbort.signal,
       onErrorLine: (lineNum) => editor.highlightErrorLine(lineNum),
     });
   } catch (err) {
     consoleIO.writeErr("\n" + ((err && err.message) || String(err)) + "\n");
   } finally {
+    runAbort = null;
     setRunning(false, draft.language);
     consoleIO.resetInput();
   }
@@ -358,7 +358,8 @@ async function runCode() {
 
 function stopCode() {
   consoleIO.cancelPendingReads(new Error("Stopped by user"));
-  consoleIO.writeInfo("\n[stop requested]\n");
+  if (runAbort) runAbort.abort();
+  consoleIO.writeInfo("\n[stopped]\n");
   setRunning(false);
 }
 
@@ -367,9 +368,11 @@ function setRunning(running, language) {
   const stopBtn = document.getElementById("stop-button");
   runBtn.disabled = running;
   runBtn.classList.toggle("is-busy", running);
-  const showStop = ASYNC_LANGUAGES.has(language);
+  const showStop = STOPPABLE_LANGUAGES.has(language);
   stopBtn.style.display = showStop ? "" : "none";
   stopBtn.disabled = !running || !showStop;
+  // The terminal accepts typing only while a program is running.
+  consoleIO.setInputActive(running);
 }
 
 // Toggle .wrap-on on the output panel based on the current setting.
@@ -380,19 +383,6 @@ function applyOutputWrap() {
   const out = document.getElementById("output");
   if (!out) return;
   out.classList.toggle("wrap-on", !!state.settings.outputWrap);
-}
-
-function updateRunModeBadge() {
-  const badge = document.getElementById("run-mode-badge");
-  if (!badge) return;
-  const lang = getActiveDraft().language;
-  const streamable = STREAMABLE_LANGUAGES.has(lang);
-  if (streamable && state.settings.streamingMode) {
-    badge.hidden = false;
-    badge.textContent = "live";
-  } else {
-    badge.hidden = true;
-  }
 }
 
 // ───── Save / Open ─────
@@ -904,8 +894,6 @@ function init() {
 
   consoleIO = createConsole({
     outputEl: document.getElementById("output"),
-    stdinInputEl: document.getElementById("stdin-input"),
-    stdinFormEl: document.getElementById("stdin-form"),
     queueEl: document.getElementById("stdin-queue"),
   });
 
@@ -917,7 +905,6 @@ function init() {
   document.getElementById("font-size").value = state.settings.fontSize;
   document.getElementById("line-wrap").checked = state.settings.wrap;
   document.getElementById("output-wrap").checked = !!state.settings.outputWrap;
-  document.getElementById("streaming-mode").checked = !!state.settings.streamingMode;
   // Apply current output-wrap setting on first paint.
   applyOutputWrap();
 
@@ -944,7 +931,6 @@ function init() {
     editor.setLanguage(draft.language);
     renderDraftTabs();
     renderSnippets();
-    updateRunModeBadge();
     updateStatusBar();
     persist();
   });
@@ -1005,11 +991,6 @@ function init() {
     applyOutputWrap();
     persist();
   });
-  document.getElementById("streaming-mode").addEventListener("change", (e) => {
-    state.settings.streamingMode = e.target.checked;
-    updateRunModeBadge();
-    persist();
-  });
 
   // Inputs panel
   document.getElementById("inputs-queue").addEventListener("click", () => {
@@ -1032,7 +1013,6 @@ function init() {
   wireDivider();
   wireInstallBanner();
   wireOnlineOffline();
-  updateRunModeBadge();
   updateStatusBar();
   maybeShowQuickStart();
   registerSW();
