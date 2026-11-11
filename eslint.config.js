@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "public", "src/legacy", "spikes"] },
+  { ignores: ["dist", "node_modules", "public", "src/legacy", "spikes", "scripts"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
 );

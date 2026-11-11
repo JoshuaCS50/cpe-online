@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "discord": { "enabled": false },
+    "ego-browser": { "enabled": false },
+    "rea": { "enabled": false },
+    "claude-jobs": { "enabled": false },
+    "typeui": { "enabled": false },
+    "nothumansearch": { "enabled": false }
+  },
+  "permission": {
+    "edit": "allow",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "external_directory": "deny",
+    "bash": {
+      "*": "deny",
+      "npm test*": "allow",
+      "npm run typecheck*": "allow",
+      "npm run lint*": "allow",
+      "npm run build*": "allow",
+      "npx vitest*": "allow",
+      "git status*": "allow",
+      "git diff*": "allow"
+    }
+  }
+}
