@@ -15,7 +15,7 @@ import {
   findCheatsheetSection,
   FORMAT_SPECIFIERS,
 } from "./cheatsheet.js";
-import { createZip } from "./zip.js";
+import { createZip } from "../../storage/zip";
 import {
   run as runProgram,
   ASYNC_LANGUAGES,
