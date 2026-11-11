@@ -17,7 +17,7 @@ export interface DebugViewOptions {
 }
 
 const REASONS: Record<PausedState["reason"], string> = {
-  entry: "start of main",
+  entry: "start of program",
   breakpoint: "breakpoint",
   step: "step",
 };
@@ -69,7 +69,8 @@ export function createDebugView(host: HTMLElement, options: DebugViewOptions): D
         // Count from the outermost call so the key survives calls and returns above it.
         const frameKey = `${state.frames.length - index}:${frame.name}`;
         const header = el("button", { type: "button", class: "debug-frame" }, [
-          el("span", { class: "debug-frame-name" }, [`${frame.name}()`]),
+          // Python calls its top level "<module>"; show that as the main program.
+          el("span", { class: "debug-frame-name" }, [frame.name.startsWith("<") ? "main program" : `${frame.name}()`]),
           el("span", { class: "debug-frame-line" }, [`line ${frame.line}`]),
         ]);
         header.addEventListener("click", () => options.onRevealLine(frame.line));

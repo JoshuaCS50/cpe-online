@@ -12,6 +12,8 @@ import type { EditorHandle } from "../editor/editor";
 import { createSymbolBar } from "../editor/symbol-bar";
 import { STOPPABLE_LANGUAGES, run as runProgram } from "../legacy/js/runners/index.js";
 import { debugCInWorker } from "../runners/c/c-runner";
+import { canBlockForInput } from "../runners/input-channel";
+import { debugPythonInWorker } from "../runners/python/python-runner";
 import { openStore } from "../storage/idb-store";
 import { migrateLegacyState } from "../storage/migrate-localstorage";
 import { createConsole } from "../terminal/console";
@@ -300,9 +302,9 @@ export async function bootShell(): Promise<void> {
   let running = false;
   let abort: AbortController | null = null;
 
-  /** Step debugging exists for C and C++ so far. */
+  /** Python pauses by sleeping on shared memory, so it needs cross-origin isolation. */
   function canDebug(language: string | undefined): boolean {
-    return language === "c" || language === "cpp";
+    return language === "c" || language === "cpp" || (language === "python" && canBlockForInput());
   }
 
   function setRunning(next: boolean, language?: string): void {
@@ -339,7 +341,8 @@ export async function bootShell(): Promise<void> {
     runChip.textContent = `Debugging ${file.name}`;
 
     const phone = (): boolean => root.dataset.tier === "phone";
-    session = debugCInWorker({
+    const startDebug = file.language === "python" ? debugPythonInWorker : debugCInWorker;
+    session = startDebug({
       code: file.doc,
       // On a phone the terminal is a separate screen: go there when the
       // program asks for input, and come back to the code when it pauses.

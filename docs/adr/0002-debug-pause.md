@@ -23,7 +23,14 @@ Known gaps to cover in the adapter (P1-21):
 
 ## Python
 
-Open. Candidates and the test that decides between them are in the plan (section 10.1, row 2; spike P1-17a).
+**Decision: a small trace function in Python, paused through shared memory.** Status: built and working in Chromium on the dev server; iPhone Safari is untested (spike P1-17a stays open).
+
+- `src/debugger/python-stepper.ts` holds the driver: `sys.settrace` with a trace function that only follows the user's file. It decides where to stop (breakpoint, step over, into, out, first line when there are no breakpoints) and describes the call stack and variables. A hand-written tracer was chosen over the standard library's `bdb` because `bdb` insists on real files for breakpoints and its stepping rules are harder to pin down for code that is not on disk. The driver is about a hundred lines and is tested under real Pyodide in Node (`tests/unit/python-stepper.test.ts`).
+- Pausing: Python runs synchronously in the worker, so the worker cannot receive messages while a program is running. At a stop the driver calls a JavaScript function that posts the paused state and then sleeps on a second shared buffer (`Atomics.wait`) until the page writes the next command. This is the same mechanism as terminal input.
+- Consequence: Python debugging needs cross-origin isolation (the headers in `public/_headers`). Without it the Debug button is disabled for Python. C and C++ debugging does not have this requirement.
+- Stop: the page sets the interrupt byte, ends any pending input, and answers a paused debugger with "stop" (the driver raises `KeyboardInterrupt`). The interpreter stays loaded.
+- Tracing is switched off in a `finally` block, so plain runs after a debug session run at full speed.
+- Not chosen: the service-worker synchronous-XHR channel and JSPI. They remain options if a target browser cannot be cross-origin isolated.
 
 ### C / C++: as built
 

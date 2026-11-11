@@ -1,6 +1,8 @@
-// Page side of the Python worker: starts runs, relays output to the terminal,
-// answers input requests, and stops programs.
+// Page side of the Python worker: starts runs and debug sessions, relays
+// output to the terminal, answers input requests, and stops programs.
 
+import type { PauseReply } from "../../debugger/python-stepper";
+import type { DebugCommand, DebugListener, DebugResult, DebugSession } from "../../debugger/types";
 import type { ConsoleIO } from "../../terminal/console";
 import { answerInput, createInputChannel } from "../input-channel";
 import { PYTHON_MAIN_FILE } from "./protocol";
@@ -13,11 +15,12 @@ export interface PythonRunOptions {
   onErrorLine?: (line: number) => void;
 }
 
-export interface PythonRunResult {
-  ok: boolean;
-  exitCode: number;
-  stopped?: boolean;
+export interface PythonDebugOptions extends PythonRunOptions {
+  breakpoints: readonly number[];
+  listener: DebugListener;
 }
+
+export type PythonRunResult = DebugResult;
 
 /** How long a program gets to react to an interrupt before the worker is ended. */
 const STOP_GRACE_MS = 1500;
@@ -54,112 +57,164 @@ export function trimTraceback(traceback: string): string {
   return [...header, ...lines.slice(firstUserFrame)].join("\n");
 }
 
-export function runPythonInWorker(options: PythonRunOptions): Promise<PythonRunResult> {
+interface Execution {
+  stop(): void;
+  finished: Promise<PythonRunResult>;
+}
+
+/** Common plumbing for runs and debug sessions. */
+function execute(
+  options: PythonRunOptions,
+  debug: PythonRunRequest["debug"],
+  onMessage: (message: PythonWorkerMessage) => void,
+): Execution {
   const { code, consoleIO, signal, onErrorLine } = options;
   const active = getWorker();
   const input = createInputChannel();
   const interruptBuffer = new SharedArrayBuffer(1);
   const interrupt = new Uint8Array(interruptBuffer);
 
-  return new Promise<PythonRunResult>((resolve) => {
-    let settled = false;
-    let stopping = false;
-    let killTimer: ReturnType<typeof setTimeout> | undefined;
+  let settle: (result: PythonRunResult) => void = () => {};
+  const finished = new Promise<PythonRunResult>((resolve) => {
+    settle = resolve;
+  });
+  let settled = false;
+  let stopping = false;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    function finish(result: PythonRunResult): void {
-      if (settled) return;
-      settled = true;
-      clearTimeout(killTimer);
-      active.removeEventListener("message", onMessage);
-      active.removeEventListener("error", onCrash);
-      signal?.removeEventListener("abort", onAbort);
-      resolve(result);
-    }
+  function finish(result: PythonRunResult): void {
+    if (settled) return;
+    settled = true;
+    clearTimeout(killTimer);
+    active.removeEventListener("message", handleMessage);
+    active.removeEventListener("error", handleCrash);
+    signal?.removeEventListener("abort", stop);
+    settle(result);
+  }
 
-    // Stop button. First ask politely: SIGINT raises KeyboardInterrupt at the
-    // next Python instruction, and a pending input() gets end of input. Code
-    // stuck where neither reaches it loses the worker after a short grace
-    // period; the runtime then reloads on the next run.
-    function onAbort(): void {
-      stopping = true;
-      interrupt[0] = 2;
-      answerInput(input, null);
-      killTimer = setTimeout(() => {
-        discardWorker();
-        finish({ ok: false, exitCode: -1, stopped: true });
-      }, STOP_GRACE_MS);
-    }
+  // First ask politely: SIGINT raises KeyboardInterrupt at the next Python
+  // instruction, a pending input() gets end of input, and a paused debugger
+  // is told to stop. Code that none of these reach loses the worker after a
+  // short grace period; the runtime then reloads on the next run.
+  function stop(): void {
+    if (settled || stopping) return;
+    stopping = true;
+    interrupt[0] = 2;
+    answerInput(input, null);
+    if (debug) answerInput(debug.control, null);
+    killTimer = setTimeout(() => {
+      discardWorker();
+      finish({ ok: false, exitCode: -1, stopped: true });
+    }, STOP_GRACE_MS);
+  }
 
-    function onMessage(event: MessageEvent<PythonWorkerMessage>): void {
-      const message = event.data;
-      switch (message.type) {
-        case "loading":
-          consoleIO.writeInfo("Loading Python runtime (first time only, ~10 MB)…\n");
-          break;
-        case "ready":
-          consoleIO.writeInfo("Python runtime ready.\n");
-          break;
-        case "stdout":
-          consoleIO.write(message.text);
-          break;
-        case "stderr":
-          consoleIO.writeErr(message.text);
-          break;
-        case "stdin-request":
-          // The program is paused on input(). Answer when the user has typed
-          // a line; a cancelled read ends the input.
-          consoleIO.readLine().then(
-            (line) => answerInput(input, line + "\n"),
-            () => answerInput(input, null),
-          );
-          break;
-        case "done":
-          consoleIO.writeInfo("\n[program finished]\n");
-          finish({ ok: true, exitCode: 0 });
-          break;
-        case "error": {
-          if (stopping || message.interrupted) {
-            finish({ ok: false, exitCode: -1, stopped: true });
-            break;
-          }
-          const line = errorLineFromTraceback(message.message);
-          if (line !== null) onErrorLine?.(line);
-          consoleIO.writeErr("\n" + trimTraceback(message.message) + "\n");
-          finish({ ok: false, exitCode: 1 });
+  function handleMessage(event: MessageEvent<PythonWorkerMessage>): void {
+    const message = event.data;
+    switch (message.type) {
+      case "loading":
+        consoleIO.writeInfo("Loading Python runtime (first time only, ~10 MB)…\n");
+        break;
+      case "ready":
+        consoleIO.writeInfo("Python runtime ready.\n");
+        break;
+      case "stdout":
+        consoleIO.write(message.text);
+        break;
+      case "stderr":
+        consoleIO.writeErr(message.text);
+        break;
+      case "stdin-request":
+        // The program is paused on input(). Answer when the user has typed
+        // a line; a cancelled read ends the input.
+        consoleIO.readLine().then(
+          (line) => answerInput(input, line + "\n"),
+          () => answerInput(input, null),
+        );
+        break;
+      case "done":
+        consoleIO.writeInfo("\n[program finished]\n");
+        finish({ ok: true, exitCode: 0 });
+        break;
+      case "error": {
+        if (stopping || message.interrupted) {
+          finish({ ok: false, exitCode: -1, stopped: true });
           break;
         }
-        case "load-failed":
-          consoleIO.writeErr("Could not load Python runtime: " + message.message + "\n");
-          consoleIO.writeInfo("Tip: connect to the internet once so the runtime caches for offline use.\n");
-          discardWorker();
-          finish({ ok: false, exitCode: -1 });
-          break;
+        const line = errorLineFromTraceback(message.message);
+        if (line !== null) onErrorLine?.(line);
+        consoleIO.writeErr("\n" + trimTraceback(message.message) + "\n");
+        finish({ ok: false, exitCode: 1 });
+        break;
       }
+      case "load-failed":
+        consoleIO.writeErr("Could not load Python runtime: " + message.message + "\n");
+        consoleIO.writeInfo("Tip: connect to the internet once so the runtime caches for offline use.\n");
+        discardWorker();
+        finish({ ok: false, exitCode: -1 });
+        break;
+      default:
+        break;
     }
+    onMessage(message);
+  }
 
-    function onCrash(event: ErrorEvent): void {
-      consoleIO.writeErr("\nPython runner crashed: " + (event.message || "unknown error") + "\n");
-      discardWorker();
-      finish({ ok: false, exitCode: -1 });
-    }
+  function handleCrash(event: ErrorEvent): void {
+    consoleIO.writeErr("\nPython runner crashed: " + (event.message || "unknown error") + "\n");
+    discardWorker();
+    finish({ ok: false, exitCode: -1 });
+  }
 
-    active.addEventListener("message", onMessage);
-    active.addEventListener("error", onCrash);
-    if (signal) {
-      if (signal.aborted) {
-        finish({ ok: false, exitCode: -1, stopped: true });
-        return;
-      }
-      signal.addEventListener("abort", onAbort);
-    }
-
+  active.addEventListener("message", handleMessage);
+  active.addEventListener("error", handleCrash);
+  if (signal?.aborted) {
+    finish({ ok: false, exitCode: -1, stopped: true });
+  } else {
+    signal?.addEventListener("abort", stop);
     const request: PythonRunRequest = {
       type: "run",
       code,
       stdin: consoleIO.drainBuffer(),
       input,
       interrupt: interruptBuffer,
+      debug,
     };
     active.postMessage(request);
+  }
+
+  return { stop, finished };
+}
+
+/** Runs the program to completion. */
+export function runPythonInWorker(options: PythonRunOptions): Promise<PythonRunResult> {
+  return execute(options, undefined, () => {}).finished;
+}
+
+/** Starts the program under the debugger. */
+export function debugPythonInWorker(options: PythonDebugOptions): DebugSession {
+  const { listener } = options;
+  const control = createInputChannel();
+  let breakpoints = [...options.breakpoints];
+  let paused = false;
+
+  const execution = execute(options, { breakpoints, control }, (message) => {
+    if (message.type === "paused") {
+      paused = true;
+      listener.onPaused(message.state);
+    }
   });
+
+  return {
+    command(command: DebugCommand) {
+      if (!paused) return;
+      paused = false;
+      listener.onResumed();
+      const reply: PauseReply = { command, breakpoints };
+      answerInput(control, JSON.stringify(reply));
+    },
+    setBreakpoints(lines) {
+      breakpoints = [...lines];
+    },
+    stop: execution.stop,
+    finished: execution.finished,
+  };
 }

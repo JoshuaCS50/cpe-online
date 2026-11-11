@@ -5,6 +5,9 @@
 //
 // It is a module worker: Pyodide is loaded with a dynamic import.
 
+import { installPythonDebugger } from "../../debugger/python-stepper";
+import type { PauseReply, PythonDebugFunction } from "../../debugger/python-stepper";
+import type { PausedState } from "../../debugger/types";
 import { waitForInput } from "../input-channel";
 import { PYODIDE_BASE_URL, PYTHON_MAIN_FILE } from "./protocol";
 import type { PythonRunRequest, PythonWorkerMessage } from "./protocol";
@@ -20,6 +23,7 @@ interface StreamWriter {
 }
 
 interface Pyodide {
+  runPython(code: string): unknown;
   runPythonAsync(code: string, options?: { globals?: PyProxy; filename?: string }): Promise<unknown>;
   setStdout(options: StreamWriter): void;
   setStderr(options: StreamWriter): void;
@@ -37,6 +41,10 @@ const post = (message: PythonWorkerMessage): void => {
 };
 
 let pyodidePromise: Promise<Pyodide> | null = null;
+/** The stepping driver, defined in the interpreter the first time it is needed. */
+let debugFunction: PythonDebugFunction | null = null;
+
+const STOP_REPLY: PauseReply = { command: "stop", breakpoints: [] };
 
 function loadPyodideOnce(): Promise<Pyodide> {
   if (!pyodidePromise) {
@@ -104,7 +112,21 @@ async function run(request: PythonRunRequest): Promise<void> {
   const namespace = pyodide.globals.get("dict")();
   namespace.set("__name__", "__main__");
   try {
-    await pyodide.runPythonAsync(request.code, { globals: namespace, filename: PYTHON_MAIN_FILE });
+    const debug = request.debug;
+    if (debug) {
+      debugFunction ??= installPythonDebugger(pyodide);
+      // Called by the driver at each stop. Reports the state, then sleeps
+      // until the page sends the next command. No answer means stop.
+      const pause = (stateJson: string): string => {
+        const reply = waitForInput(debug.control, () =>
+          post({ type: "paused", state: JSON.parse(stateJson) as PausedState }),
+        );
+        return reply ?? JSON.stringify(STOP_REPLY);
+      };
+      debugFunction(request.code, PYTHON_MAIN_FILE, pause, debug.breakpoints, namespace);
+    } else {
+      await pyodide.runPythonAsync(request.code, { globals: namespace, filename: PYTHON_MAIN_FILE });
+    }
     await pyodide.runPythonAsync("import sys\nsys.stdout.flush()\nsys.stderr.flush()");
     post({ type: "done" });
   } catch (error) {

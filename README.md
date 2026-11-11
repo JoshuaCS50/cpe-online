@@ -12,6 +12,7 @@ A mobile-friendly web IDE for **C, C++, Python**, and **Java** that runs entirel
 - **Save** your code as `.c` / `.cpp` / `.py` / `.java` files; **open** files back from your device.
 - **Auto-save** every keystroke to `localStorage`, plus tabs / multi-file support.
 - **Terminal input like a desktop IDE**: when a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
+- **Step debugger** for C, C++ and Python (new shell, `?shell=2`): breakpoints, step over / into / out, call stack and variables.
 - **Installable as a PWA** — "Add to Home Screen" on phones for an app-like icon.
 - **Works offline** after the first visit (service worker precaches the app shell + JSCPP bundle).
 - **Onboarding hint, examples menu** (Hello World, scanf input, loops, arrays, etc.).

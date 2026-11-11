@@ -1,5 +1,7 @@
 // Messages between the page and the Python worker.
 
+import type { PausedState } from "../../debugger/types";
+
 export const PYODIDE_VERSION = "0.26.3";
 export const PYODIDE_BASE_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
@@ -15,6 +17,15 @@ export interface PythonRunRequest {
   input: SharedArrayBuffer;
   /** One shared byte; the page writes 2 (SIGINT) to interrupt running code. */
   interrupt: SharedArrayBuffer;
+  /** Present for a debug session. */
+  debug?: {
+    breakpoints: number[];
+    /**
+     * Channel the worker sleeps on while paused. The page answers with a
+     * JSON PauseReply (see debugger/python-stepper.ts), or end-of-input to stop.
+     */
+    control: SharedArrayBuffer;
+  };
 }
 
 export type PythonWorkerMessage =
@@ -23,6 +34,7 @@ export type PythonWorkerMessage =
   | { type: "stdout"; text: string }
   | { type: "stderr"; text: string }
   | { type: "stdin-request" }
+  | { type: "paused"; state: PausedState }
   | { type: "done" }
   | { type: "error"; message: string; interrupted: boolean }
   | { type: "load-failed"; message: string };
