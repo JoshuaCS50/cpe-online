@@ -14,7 +14,7 @@ import { PYTHON_CATALOG } from "../../src/diagnostics/catalog-python";
 import { CATALOG, explainError } from "../../src/diagnostics/engine";
 import { parseCError, parsePythonError } from "../../src/diagnostics/parse";
 import type { CatalogEntry, RawError } from "../../src/diagnostics/types";
-import { rawJscppError } from "../helpers/legacy-c";
+import { rawJscppError } from "../helpers/jscpp";
 
 type Runner = (source: string, stdin: string[]) => Promise<RawError | null>;
 

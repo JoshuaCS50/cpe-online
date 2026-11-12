@@ -1,7 +1,7 @@
 // Page side of the C / C++ worker: plain runs and debug sessions.
 
 import type { DebugCommand, DebugListener, DebugResult, DebugSession } from "../../debugger/types";
-import { explainJSCPPError } from "../../legacy/js/runners/c.js";
+import { parseCError } from "../../diagnostics/parse";
 import type { ConsoleIO } from "../../terminal/console";
 import { answerInput, canBlockForInput, createInputChannel } from "../input-channel";
 import type { CWorkerMessage, CWorkerRequest } from "./protocol";
@@ -104,9 +104,10 @@ function execute(
           finish({ ok: false, exitCode: -1 }, true);
           break;
         }
-        const { line, friendly } = explainJSCPPError(message.message);
-        if (line) onErrorLine?.(line);
-        consoleIO.writeErr(`\n❌ ${line ? `Line ${line} — ` : ""}${friendly}\n`);
+        // No explainer given: show the interpreter's own words.
+        const { line } = parseCError(message.message);
+        if (line !== null) onErrorLine?.(line);
+        consoleIO.writeErr(`\n${message.message.trimEnd()}\n`);
         finish({ ok: false, exitCode: -1 }, true);
         break;
       }
@@ -117,7 +118,7 @@ function execute(
   }
 
   function handleCrash(event: ErrorEvent): void {
-    consoleIO.writeErr(`\n❌ The C runner crashed: ${event.message || "unknown error"}\n`);
+    consoleIO.writeErr(`\nThe C runner crashed: ${event.message || "unknown error"}\n`);
     finish({ ok: false, exitCode: -1 }, false);
   }
 

@@ -1,7 +1,7 @@
 // Reference: the CPE150S cheat sheet (format specifiers, data types, and so
 // on), one topic at a time.
 
-import { CHEATSHEET_SECTIONS } from "../legacy/js/cheatsheet.js";
+import { CHEATSHEET_SECTIONS } from "../content/cheatsheet";
 import { el } from "./dom";
 
 export function createReferenceView(host: HTMLElement): void {

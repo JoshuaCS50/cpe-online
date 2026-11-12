@@ -27,7 +27,7 @@ const SKIP = new Set(["lsp", "test", "testing", "generated", "builtins.js"]);
 /** The one small file under a skipped folder that the entry module does import. */
 const EXTRA = ["generated/fea-study-document-contracts.js"];
 /** Bump when this script's output changes, so existing copies are rebuilt. */
-const LAYOUT = 2;
+const LAYOUT = 3;
 
 if (!existsSync(join(SOURCE, "package.json"))) {
   console.error("runmat is not installed. Run `npm install` first.");
@@ -36,11 +36,14 @@ if (!existsSync(join(SOURCE, "package.json"))) {
 
 const { version } = JSON.parse(readFileSync(join(SOURCE, "package.json"), "utf8"));
 const stampFile = join(TARGET, "runtime.json");
+// Everything except the manifest sits in a folder named after the version, so
+// its URLs change with each release and can be cached for good.
+const versionDir = join(TARGET, version);
 
 // Nothing to do when the copy already matches the installed version.
 if (existsSync(stampFile)) {
   const stamp = JSON.parse(readFileSync(stampFile, "utf8"));
-  const complete = stamp.parts?.every((part) => existsSync(join(TARGET, part.file)));
+  const complete = stamp.parts?.every((part) => existsSync(join(versionDir, part.file)));
   if (stamp.version === version && stamp.layout === LAYOUT && complete) {
     console.log(`RunMat ${version} already in ${TARGET}.`);
     process.exit(0);
@@ -48,7 +51,7 @@ if (existsSync(stampFile)) {
 }
 
 rmSync(TARGET, { recursive: true, force: true });
-mkdirSync(TARGET, { recursive: true });
+mkdirSync(versionDir, { recursive: true });
 
 function copyScripts(from, to) {
   for (const entry of readdirSync(from)) {
@@ -65,13 +68,13 @@ function copyScripts(from, to) {
 for (const entry of readdirSync(join(SOURCE, "dist"))) {
   if (SKIP.has(entry)) continue;
   const source = join(SOURCE, "dist", entry);
-  if (statSync(source).isDirectory()) copyScripts(source, join(TARGET, entry));
-  else if (entry.endsWith(".js")) cpSync(source, join(TARGET, entry));
+  if (statSync(source).isDirectory()) copyScripts(source, join(versionDir, entry));
+  else if (entry.endsWith(".js")) cpSync(source, join(versionDir, entry));
 }
 
 for (const file of EXTRA) {
-  mkdirSync(join(TARGET, file, ".."), { recursive: true });
-  cpSync(join(SOURCE, "dist", file), join(TARGET, file));
+  mkdirSync(join(versionDir, file, ".."), { recursive: true });
+  cpSync(join(SOURCE, "dist", file), join(versionDir, file));
 }
 
 const wasm = readFileSync(join(SOURCE, WASM));
@@ -79,9 +82,9 @@ const parts = [];
 for (let offset = 0, index = 0; offset < wasm.length; offset += PART_BYTES, index++) {
   const chunk = wasm.subarray(offset, offset + PART_BYTES);
   const file = `runtime.part${String(index).padStart(2, "0")}`;
-  writeFileSync(join(TARGET, file), chunk);
+  writeFileSync(join(versionDir, file), chunk);
   parts.push({ file, bytes: chunk.length });
 }
 
-writeFileSync(stampFile, JSON.stringify({ version, layout: LAYOUT, totalBytes: wasm.length, parts }, null, 2) + "\n");
+writeFileSync(stampFile, JSON.stringify({ version, layout: LAYOUT, dir: `${version}/`, totalBytes: wasm.length, parts }, null, 2) + "\n");
 console.log(`RunMat ${version}: ${parts.length} parts, ${(wasm.length / 1e6).toFixed(1)} MB, copied to ${TARGET}.`);

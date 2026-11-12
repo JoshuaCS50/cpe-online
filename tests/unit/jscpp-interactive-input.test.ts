@@ -2,7 +2,7 @@
 // on demand. These tests pin down that behaviour against the real interpreter.
 
 import { describe, expect, it } from "vitest";
-import { runCInteractive, runLegacyC } from "../helpers/legacy-c";
+import { runCInteractive } from "../helpers/jscpp";
 
 const c = (body: string) => `#include <stdio.h>\nint main() {\n${body}\n    return 0;\n}\n`;
 const cpp = (body: string) => `#include <iostream>\nusing namespace std;\nint main() {\n${body}\n    return 0;\n}\n`;
@@ -70,12 +70,6 @@ describe("C input on demand", () => {
     const run = runCInteractive(c(body), ["unused"]);
     expect(run.stdout).toBe("7\n");
     expect(run.requests).toBe(0);
-  });
-
-  it("input queued before the run still works through the legacy runner", async () => {
-    const body = ['    int a, b;', '    scanf("%d", &a);', '    scanf("%d", &b);', '    printf("%d\\n", a - b);'].join("\n");
-    const run = await runLegacyC(c(body), "50\n8\n");
-    expect(run.stdout).toBe("42\n");
   });
 });
 

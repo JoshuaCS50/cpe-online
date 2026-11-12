@@ -5,7 +5,7 @@ import { createCStepper } from "../../src/debugger/c-stepper";
 import type { StepOutcome } from "../../src/debugger/c-stepper";
 import type { PausedState } from "../../src/debugger/types";
 import type { JscppDebugger } from "../../src/runners/c/jscpp";
-import { debugC } from "../helpers/legacy-c";
+import { debugC } from "../helpers/jscpp";
 
 //  1 #include <stdio.h>
 //  2

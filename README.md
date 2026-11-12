@@ -1,78 +1,97 @@
 # CPE Online
 
-A mobile-friendly web IDE for **C, C++, Python**, and **Java** that runs entirely in your browser. Anyone with a phone or tablet that has data can open the site once — after that, no internet is needed to keep coding.
+A browser IDE for learning to program. Write, run and debug **C, C++, Python** and **MATLAB** on a phone, tablet or laptop, with no installation and no server. After the first visit it works offline.
 
-> Modeled loosely on Dev-C++ and Code::Blocks: editor, output console, file tabs, save/open. Designed thumb-first for phones.
+## What it does
 
-## Features
+- **Editor** with syntax highlighting, tabs, a file explorer and a row of symbol keys on touch devices.
+- **Runs C and C++** with the [JSCPP](https://github.com/felixhao28/JSCPP) interpreter, **Python** with [Pyodide](https://pyodide.org/), and **MATLAB** with [RunMat](https://github.com/runmat-org/runmat). Each runtime downloads the first time its language is run.
+- **Terminal like a desktop IDE.** When a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
+- **Step debugger** for C, C++ and Python: breakpoints, step over, into and out, the call stack, and each call's variables with changes highlighted.
+- **Errors explained.** A failed program shows a card saying what went wrong, where, why, and how to fix it, with the original message one click away. A Problems tab lists them.
+- **Files stay on the device** (IndexedDB), and can be saved to or opened from the device, or exported as one zip.
+- **Examples and a reference sheet** for the CPE150S course.
+- **Dark, light or match-device theme**, adjustable code size.
+- **Three layouts**: laptop (everything docked), tablet (explorer slides over the editor), phone (one screen at a time).
 
-- **Write C, C++, Python, and Java** with syntax highlighting (CodeMirror).
-- **Run C / C++ in the browser** via [JSCPP](https://github.com/felixhao28/JSCPP) — no server, no compile API.
-- **Run Python** via [Pyodide](https://pyodide.org/) (lazy-loaded on first Python run).
-- **Save** your code as `.c` / `.cpp` / `.py` / `.java` files; **open** files back from your device.
-- **Auto-save** every keystroke to `localStorage`, plus tabs / multi-file support.
-- **Terminal input like a desktop IDE**: when a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
-- **Step debugger** for C, C++ and Python (new shell, `?shell=2`): breakpoints, step over / into / out, call stack and variables.
-- **MATLAB** (new shell): `.m` files run in the browser through [RunMat](https://github.com/runmat-org/runmat), an open-source MATLAB-compatible runtime. It downloads on the first MATLAB run only (about 23 MB compressed) and needs no MATLAB licence.
-- **Installable as a PWA** — "Add to Home Screen" on phones for an app-like icon.
-- **Works offline** after the first visit (service worker precaches the app shell + JSCPP bundle).
-- **Onboarding hint, examples menu** (Hello World, scanf input, loops, arrays, etc.).
-- **Themes**: dark, light, auto. Adjustable font size. Optional line wrapping.
+Java files can be written and saved but not run.
 
-## Quick start
-
-The app is being rebuilt on Vite + TypeScript (see docs/PLAN.md, kept local). The original app runs unchanged from `src/legacy/` while it is replaced module by module.
+## Getting started
 
 ```bash
 npm install
-npm run dev        # dev server with hot reload
-npm run build      # typecheck + production build into dist/
-npm run preview    # serve the production build
-npm test           # unit tests (Vitest)
-npm run lint
 ```
 
-### Deploy
+```bash
+npm run dev
+```
 
-Static output in `dist/`. Target host is Cloudflare Pages (build command `npm run build`, output directory `dist`). `public/_headers` sends the cross-origin isolation headers the Python runner and debugger rely on.
+Other commands:
+
+| Command | What it does |
+|---|---|
+| `npm run build` | Type-checks and builds the site into `dist/` |
+| `npm run preview` | Serves the built site, with the same headers as production |
+| `npm test` | Unit tests, including runs through the real C, Python and MATLAB runtimes |
+| `npm run typecheck` | TypeScript only |
+| `npm run lint` | ESLint |
+
+Node 24 is expected (see `.nvmrc`).
+
+## Deploying
+
+See [docs/DEPLOY.md](docs/DEPLOY.md). In short: Cloudflare Pages, build command `npm run build`, output directory `dist`.
 
 ## Project layout
 
 ```
 .
-├── index.html                 # Vite entry: app shell markup
-├── vite.config.ts             # build, dev headers, Vitest config
+├── index.html                  # entry page; everything else is built by src/main.ts
+├── vite.config.ts              # build, dev headers, tests, service-worker manifest step
 ├── public/
-│   ├── _headers               # Cloudflare Pages headers (COOP/COEP)
-│   ├── manifest.webmanifest   # PWA metadata
-│   ├── sw.js                  # service worker (offline caching)
-│   └── vendor/JSCPP.es5.min.js
+│   ├── _headers                # Cloudflare Pages headers (cross-origin isolation, caching)
+│   ├── manifest.webmanifest    # install metadata
+│   ├── sw.js                   # service worker; filled in at build time
+│   └── vendor/
+│       ├── JSCPP.es5.min.js    # C interpreter, generated by scripts/patch-jscpp.mjs
+│       └── runmat/             # MATLAB runtime, generated by scripts/vendor-runmat.mjs (not committed)
+├── vendor-src/                 # untouched upstream JSCPP bundle
+├── scripts/                    # build helpers and tooling for hosted-model work packages
 ├── src/
-│   ├── main.ts                # entry; boots the legacy app for now
-│   └── legacy/                # original app, being ported to TypeScript
-│       ├── css/app.css
-│       └── js/                # app, editor, console, storage, runners, ...
-└── tests/unit/                # Vitest tests
+│   ├── main.ts                 # starts the shell and the service worker
+│   ├── shell/                  # layout, explorer, tabs, side views, settings
+│   ├── editor/                 # CodeMirror 6 editor, symbol keys
+│   ├── terminal/               # output and inline input
+│   ├── runners/                # C, Python and MATLAB workers, input channel, dispatcher
+│   ├── debugger/               # stepping engines for C and Python, debug pane
+│   ├── diagnostics/            # error parsers, catalog and error card
+│   ├── storage/                # device store, settings, zip, migration of old drafts
+│   ├── content/                # examples and the reference sheet
+│   ├── theme/                  # design tokens
+│   └── pwa/                    # service-worker registration
+├── tests/unit/                 # Vitest tests
+├── spikes/                     # small experiments kept as evidence
+└── docs/                       # deploy guide, decision records, work-package briefs
 ```
 
 ## How offline works
 
-On the first visit, the service worker (`sw.js`) precaches `index.html`, the CSS, every JS module, and the JSCPP bundle. Third-party CDN files (CodeMirror, Pyodide) are stored using a stale-while-revalidate cache the first time they're hit. Subsequent visits — even on airplane mode — load entirely from cache.
+The service worker stores the app shell on the first visit, and each language runtime the first time that language is run. After that the app opens and runs programs with no connection. Details are in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Known limitations
 
-- **No varargs in `<stdio.h>`** before JSCPP 2.x — we ship 2.0.6 which supports `printf` and `scanf`. Multi-file `#include "myheader.h"` projects aren't supported.
-- **Java** is a placeholder in v1; the Java runner shows a "coming soon" message and lets you save `.java` files. A WASM JVM (DoppioJVM / TeaVM) will land in a future update.
-- **Interactive input needs cross-origin isolation.** C, C++ and Python run in workers and pause at `scanf` / `cin` / `input()` until you type in the terminal. That relies on shared memory, which browsers only allow when the site sends the headers in `public/_headers`. On a host without them, C and C++ fall back to reading input queued before the run.
-- **`scanf("%c", ...)` does not work** in the bundled JSCPP build (it fails upstream too).
-- **No real `gcc`/`clang`** — JSCPP is an interpreter that covers the C subset typical for coursework. If you need full compiler features, that would require a much larger WASM toolchain.
+- **Typed input needs cross-origin isolation.** Programs pause for input using shared memory, which browsers only allow when the site sends the headers in `public/_headers`. Without them programs still run, but `scanf`, `cin` and `input()` get end of input, and Python cannot be debugged. The status bar says so.
+- **C and C++ run in an interpreter**, not a compiler. It covers what coursework usually needs. `scanf("%c", ...)` does not work, multi-file projects are not supported, and there is no time limit on a running program (use Stop).
+- **MATLAB** runs through a compatible runtime, not MATLAB itself, so some behaviour differs. Plotting is not connected yet and there is no MATLAB debugger. The runtime is large: about 23 MB to download, and it may be slow on low-memory phones.
+- **Breakpoints** are not remembered after a reload.
 
-## Tech credits
+## Credits
 
-- [CodeMirror 5](https://codemirror.net/5/) — editor
-- [JSCPP](https://github.com/felixhao28/JSCPP) — JavaScript C/C++ interpreter
-- [Pyodide](https://pyodide.org/) — Python in WebAssembly
-- [Catppuccin](https://github.com/catppuccin)-inspired color palette
+- [CodeMirror 6](https://codemirror.net/): editor
+- [JSCPP](https://github.com/felixhao28/JSCPP): C and C++ interpreter
+- [Pyodide](https://pyodide.org/): Python in WebAssembly
+- [RunMat](https://github.com/runmat-org/runmat): MATLAB-compatible runtime
+- [Tabler Icons](https://tabler.io/icons), [JetBrains Mono](https://www.jetbrains.com/lp/mono/)
 
 ## License
 

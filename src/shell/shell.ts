@@ -14,10 +14,9 @@ import type { DebugCommand, DebugSession } from "../debugger/types";
 import { createEditor } from "../editor/editor";
 import type { EditorHandle } from "../editor/editor";
 import { createSymbolBar } from "../editor/symbol-bar";
-import { STOPPABLE_LANGUAGES, run as runProgram } from "../legacy/js/runners/index.js";
+import { canStop, runProgram } from "../runners/run";
 import { debugCInWorker } from "../runners/c/c-runner";
 import { canBlockForInput } from "../runners/input-channel";
-import { runMatlabInWorker } from "../runners/matlab/matlab-runner";
 import { debugPythonInWorker } from "../runners/python/python-runner";
 import { openStore } from "../storage/idb-store";
 import { migrateLegacyState } from "../storage/migrate-localstorage";
@@ -179,12 +178,14 @@ export async function bootShell(): Promise<void> {
   const main = el("main", { class: "main" }, [editorPane, splitter, panel]);
 
   const storageChip = el("span", { class: "status-item" });
+  const isolationChip = el("span", { class: "status-item is-warning" });
   const runChip = el("span", { class: "status-item", role: "status" }, ["Ready"]);
   const cursorChip = el("span", { class: "status-item" });
   const languageChip = el("span", { class: "status-item" });
   const onlineChip = el("span", { class: "status-item" });
   const statusBar = el("footer", { class: "statusbar" }, [
     storageChip,
+    isolationChip,
     runChip,
     el("span", { class: "status-spacer" }),
     cursorChip,
@@ -205,9 +206,7 @@ export async function bootShell(): Promise<void> {
 
   const shell = el("div", { class: "shell" }, [titleBar, rail, sidebar, scrim, main, statusBar, bottomNav]);
 
-  // The legacy markup shares this document until the new shell replaces it.
-  document.querySelectorAll("body > :not(script)").forEach((node) => node.remove());
-  document.body.append(shell);
+  document.body.replaceChildren(shell);
 
   // ───── Layout state ─────
 
@@ -405,7 +404,7 @@ export async function bootShell(): Promise<void> {
     running = next;
     runButton.disabled = next || workspace.activeFile === null;
     debugButton.disabled = next || !canDebug(workspace.activeFile?.language);
-    stopButton.disabled = !next || !(STOPPABLE_LANGUAGES.has(language ?? "") || language === "matlab");
+    stopButton.disabled = !next || !canStop(language);
     shell.dataset.running = String(next);
     consoleIO.setInputActive(next);
   }
@@ -562,36 +561,15 @@ export async function bootShell(): Promise<void> {
     abort = new AbortController();
     let outcome = "Finished";
     try {
-      const onErrorLine = (line: number): void => editor.highlightErrorLine(line);
-      const result =
-        file.language === "matlab"
-          ? await runMatlabInWorker({
-              code: file.doc,
-              fileName: file.name,
-              consoleIO,
-              signal: abort.signal,
-              onErrorLine,
-              onError: (error) =>
-                reportError(file, {
-                  language: "matlab",
-                  text: error.diagnostic,
-                  details: {
-                    message: error.message,
-                    identifier: error.identifier,
-                    line: error.line ?? undefined,
-                    column: error.column ?? undefined,
-                  },
-                }),
-            })
-          : await runProgram({
-              language: file.language,
-              code: file.doc,
-              consoleIO,
-              signal: abort.signal,
-              onErrorLine,
-              onError: (text: string) => reportError(file, { language: file.language, text }),
-            });
-      if ("stopped" in result && result.stopped) outcome = "Stopped";
+      const result = await runProgram({
+        language: file.language,
+        code: file.doc,
+        fileName: file.name,
+        consoleIO,
+        signal: abort.signal,
+        onError: (error) => reportError(file, error),
+      });
+      if (result.stopped) outcome = "Stopped";
       else if (!result.ok) outcome = "Failed";
     } catch (error) {
       consoleIO.writeErr("\n" + (error instanceof Error ? error.message : String(error)) + "\n");
@@ -628,6 +606,18 @@ export async function bootShell(): Promise<void> {
     store.persistent ? "Saved on this device" : "Not saved: private window",
   );
   if (!store.persistent) storageChip.classList.add("is-warning");
+
+  // Without cross-origin isolation programs still run, but cannot wait for
+  // typed input and Python cannot be debugged. Say so instead of failing quietly.
+  if (!canBlockForInput()) {
+    isolationChip.replaceChildren(icon("alertTriangle"), "Typed input is unavailable on this address");
+    isolationChip.title = "This site is not cross-origin isolated, so running programs cannot pause for input.";
+  }
+
+  // A newer version of the app has been installed by the service worker.
+  document.addEventListener("cpe:updated", () => {
+    runChip.textContent = "New version ready. Reload to use it.";
+  });
 
   function syncOnline(): void {
     onlineChip.replaceChildren(icon(navigator.onLine ? "wifi" : "wifiOff"), navigator.onLine ? "Online" : "Offline");

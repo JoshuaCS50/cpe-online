@@ -2,7 +2,9 @@
 // CPE150S cheat sheet PDF so students see the same language in the IDE
 // that they read in the handout.
 
-export const EXAMPLES = [
+import type { Example } from "./examples-matlab";
+
+export const EXAMPLES: Example[] = [
   // ───────── C ─────────
   {
     id: "c-hello",
@@ -303,6 +305,6 @@ public class Hello {
   },
 ];
 
-export function findExample(id) {
+export function findExample(id: string): Example | undefined {
   return EXAMPLES.find((ex) => ex.id === id);
 }

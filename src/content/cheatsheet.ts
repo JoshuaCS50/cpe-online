@@ -136,7 +136,7 @@ export const CHEATSHEET_SECTIONS = [
   },
 ];
 
-export function findCheatsheetSection(id) {
+export function findCheatsheetSection(id: string): (typeof CHEATSHEET_SECTIONS)[number] | undefined {
   return CHEATSHEET_SECTIONS.find((s) => s.id === id);
 }
 

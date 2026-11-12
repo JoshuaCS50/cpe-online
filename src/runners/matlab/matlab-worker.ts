@@ -35,16 +35,18 @@ interface Runtime {
 
 let runtimePromise: Promise<Runtime> | null = null;
 
-async function fetchRuntimeBytes(): Promise<Uint8Array> {
-  const manifestResponse = await fetch(`${baseUrl}runtime.json`);
-  if (!manifestResponse.ok) throw new Error(`runtime manifest not found (${manifestResponse.status})`);
-  const manifest = (await manifestResponse.json()) as RuntimeManifest;
+async function fetchManifest(): Promise<RuntimeManifest> {
+  const response = await fetch(`${baseUrl}runtime.json`);
+  if (!response.ok) throw new Error(`runtime manifest not found (${response.status})`);
+  return (await response.json()) as RuntimeManifest;
+}
 
+async function fetchRuntimeBytes(manifest: RuntimeManifest): Promise<Uint8Array> {
   const bytes = new Uint8Array(manifest.totalBytes);
   let offset = 0;
   post({ type: "loading", loadedBytes: 0, totalBytes: manifest.totalBytes });
   for (const part of manifest.parts) {
-    const response = await fetch(`${baseUrl}${part.file}`);
+    const response = await fetch(`${baseUrl}${manifest.dir}${part.file}`);
     if (!response.ok) throw new Error(`runtime part ${part.file} not found (${response.status})`);
     const chunk = new Uint8Array(await response.arrayBuffer());
     if (chunk.length !== part.bytes) throw new Error(`runtime part ${part.file} is incomplete`);
@@ -58,9 +60,12 @@ async function fetchRuntimeBytes(): Promise<Uint8Array> {
 function loadRuntime(): Promise<Runtime> {
   if (!runtimePromise) {
     runtimePromise = (async () => {
+      // The manifest names the folder for the installed version; every other
+      // file lives there, so the scripts and the binary always match.
+      const manifest = await fetchManifest();
       const [module, wasm] = await Promise.all([
-        import(/* @vite-ignore */ `${baseUrl}index.js`) as Promise<RunMatModule>,
-        fetchRuntimeBytes(),
+        import(/* @vite-ignore */ `${baseUrl}${manifest.dir}index.js`) as Promise<RunMatModule>,
+        fetchRuntimeBytes(manifest),
       ]);
       post({ type: "ready" });
       return { module, wasm };

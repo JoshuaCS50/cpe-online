@@ -39,6 +39,8 @@ export interface MatlabErrorReport {
 /** Layout of the vendored runtime; written by scripts/vendor-runmat.mjs. */
 export interface RuntimeManifest {
   version: string;
+  /** Folder, relative to the manifest, holding this version's files. Ends with "/". */
+  dir: string;
   totalBytes: number;
   parts: { file: string; bytes: number }[];
 }

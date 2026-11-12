@@ -86,9 +86,11 @@ async function run(request: PythonRunRequest): Promise<void> {
     return;
   }
 
-  const interrupt = new Uint8Array(request.interrupt);
-  interrupt[0] = 0;
-  pyodide.setInterruptBuffer(interrupt);
+  if (request.interrupt) {
+    const interrupt = new Uint8Array(request.interrupt);
+    interrupt[0] = 0;
+    pyodide.setInterruptBuffer(interrupt);
+  }
   pyodide.setStdout(streamWriter("stdout"));
   pyodide.setStderr(streamWriter("stderr"));
 
@@ -103,7 +105,8 @@ async function run(request: PythonRunRequest): Promise<void> {
         queued = queued.slice(line.length);
         return line;
       }
-      return waitForInput(request.input, () => post({ type: "stdin-request" }));
+      const channel = request.input;
+      return channel ? waitForInput(channel, () => post({ type: "stdin-request" })) : null;
     },
     isatty: true,
   });

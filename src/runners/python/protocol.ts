@@ -13,10 +13,13 @@ export interface PythonRunRequest {
   code: string;
   /** Input queued before the run; consumed before the user is asked. */
   stdin: string;
-  /** Channel the worker sleeps on while the user types (see input-channel.ts). */
-  input: SharedArrayBuffer;
-  /** One shared byte; the page writes 2 (SIGINT) to interrupt running code. */
-  interrupt: SharedArrayBuffer;
+  /**
+   * Channel the worker sleeps on while the user types (see input-channel.ts).
+   * Null without cross-origin isolation: input() then gets end of input.
+   */
+  input: SharedArrayBuffer | null;
+  /** One shared byte; the page writes 2 (SIGINT) to interrupt running code. Null without isolation. */
+  interrupt: SharedArrayBuffer | null;
   /** Present for a debug session. */
   debug?: {
     breakpoints: number[];

@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { createZip, createZipBytes, crc32, safeName } from "../../src/storage/zip";
 import type { ZipEntry } from "../../src/storage/zip";
-import { createZip as legacyCreateZip } from "../../src/legacy/js/zip.js";
 
 const enc = new TextEncoder();
 
@@ -20,10 +19,6 @@ function unzip(bytes: Uint8Array): Record<string, string> {
   for (const [name, data] of Object.entries(entries)) out[name] = strFromU8(data);
   return out;
 }
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe("crc32", () => {
   it("matches the standard check value for \"123456789\"", () => {
@@ -60,14 +55,6 @@ describe("createZipBytes", () => {
     const first = createZipBytes(SAMPLE_FILES, FIXED_DATE);
     const second = createZipBytes(SAMPLE_FILES, FIXED_DATE);
     expect(first).toEqual(second);
-  });
-
-  it("matches the legacy encoder byte for byte", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(FIXED_DATE);
-    const legacyBlob = legacyCreateZip(SAMPLE_FILES);
-    const legacyBytes = new Uint8Array(await legacyBlob.arrayBuffer());
-    expect(legacyBytes).toEqual(createZipBytes(SAMPLE_FILES, FIXED_DATE));
   });
 });
 

@@ -3,7 +3,7 @@
 
 import { MATLAB_EXAMPLES } from "../content/examples-matlab";
 import type { Example } from "../content/examples-matlab";
-import { EXAMPLES } from "../legacy/js/examples.js";
+import { EXAMPLES } from "../content/examples";
 import { el } from "./dom";
 import { icon } from "./icons";
 import type { Workspace } from "./workspace";

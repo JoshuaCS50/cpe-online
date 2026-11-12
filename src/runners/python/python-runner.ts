@@ -4,7 +4,7 @@
 import type { PauseReply } from "../../debugger/python-stepper";
 import type { DebugCommand, DebugListener, DebugResult, DebugSession } from "../../debugger/types";
 import type { ConsoleIO } from "../../terminal/console";
-import { answerInput, createInputChannel } from "../input-channel";
+import { answerInput, canBlockForInput, createInputChannel } from "../input-channel";
 import { PYTHON_MAIN_FILE } from "./protocol";
 import type { PythonRunRequest, PythonWorkerMessage } from "./protocol";
 
@@ -75,9 +75,12 @@ function execute(
 ): Execution {
   const { code, consoleIO, signal, onErrorLine } = options;
   const active = getWorker();
-  const input = createInputChannel();
-  const interruptBuffer = new SharedArrayBuffer(1);
-  const interrupt = new Uint8Array(interruptBuffer);
+  // Shared memory needs cross-origin isolation. Without it the program still
+  // runs, but input() gets end of input and Stop has to end the worker.
+  const isolated = canBlockForInput();
+  const input = isolated ? createInputChannel() : null;
+  const interruptBuffer = isolated ? new SharedArrayBuffer(1) : null;
+  const interrupt = interruptBuffer ? new Uint8Array(interruptBuffer) : null;
 
   let settle: (result: PythonRunResult) => void = () => {};
   const finished = new Promise<PythonRunResult>((resolve) => {
@@ -104,6 +107,11 @@ function execute(
   function stop(): void {
     if (settled || stopping) return;
     stopping = true;
+    if (!interrupt || !input) {
+      discardWorker();
+      finish({ ok: false, exitCode: -1, stopped: true });
+      return;
+    }
     interrupt[0] = 2;
     answerInput(input, null);
     if (debug) answerInput(debug.control, null);
@@ -131,10 +139,12 @@ function execute(
       case "stdin-request":
         // The program is paused on input(). Answer when the user has typed
         // a line; a cancelled read ends the input.
-        consoleIO.readLine().then(
-          (line) => answerInput(input, line + "\n"),
-          () => answerInput(input, null),
-        );
+        if (input) {
+          consoleIO.readLine().then(
+            (line) => answerInput(input, line + "\n"),
+            () => answerInput(input, null),
+          );
+        }
         break;
       case "done":
         consoleIO.writeInfo("\n[program finished]\n");
