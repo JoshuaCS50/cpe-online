@@ -49,6 +49,11 @@ function lessonHref(id: string, tab?: LessonTab): string {
   return `#/learn/${id}${tab && tab !== "overview" ? `/${tab}` : ""}`;
 }
 
+/** Plain text where `backticks` mark code. Built as text nodes, so nothing in it is treated as HTML. */
+export function withInlineCode(text: string): (Node | string)[] {
+  return text.split("`").map((part, index) => (index % 2 === 1 ? el("code", {}, [part]) : part));
+}
+
 /** Lesson text compiled at build time from the project's own files, with raw HTML already escaped. */
 function prose(html: string, extraClass = ""): HTMLElement {
   const node = el("div", { class: `prose ${extraClass}`.trim() });
@@ -352,7 +357,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       const hint = hints[shownHints];
       if (hint === undefined) return;
       shownHints += 1;
-      hintList.append(el("li", {}, [hint]));
+      hintList.append(el("li", {}, withInlineCode(hint)));
       const label = hintButton.querySelector(".btn-label");
       if (shownHints >= hints.length) hintButton.disabled = true;
       else if (label) label.textContent = `Another hint (${shownHints} of ${hints.length} shown)`;

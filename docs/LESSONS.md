@@ -54,6 +54,8 @@ The same task in simple words.
 
 A code block without `{role=...}` stays in the text where it is written.
 
+Hints are plain text, except that text between backticks is shown as code: `` 'Type this: `n++;`' ``. In kid hints, code in backticks counts as one word, which keeps a long line of code within the 12-word rule.
+
 "Try it yourself" is all or nothing: `::: try`, `::: try-kid`, a starter, a solution and at least one check. `hints` and `hintsKid` must have the same number of entries.
 
 ## Checks
@@ -91,6 +93,7 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 - Write `int main()`, not `int main(void)`.
 - Avoid `scanf("%c", ...)`.
 - There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.
+- It is slow: roughly 15,000 loop repetitions a second. Keep loops in lessons under about 1,000 repetitions. The tests stop a C program after a million interpreter steps and report it as a loop that never ends, so a starter that loops forever fails the build instead of hanging it.
 - Comparisons and `&&`, `||`, `!` give 1 or 0 as in real C, including when printed with `%d` or stored in an `int`. This relies on two patches in `scripts/patch-jscpp.mjs`; `tests/unit/jscpp-comparisons.test.ts` guards them.
 
 ## Adding a unit

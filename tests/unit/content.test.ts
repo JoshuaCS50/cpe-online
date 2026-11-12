@@ -10,7 +10,7 @@ import type { Lesson } from "../../src/content/schema";
 import { allPassed, runChecks } from "../../src/learn/checker";
 import type { ProgramResult, ProgramRunner } from "../../src/learn/checker";
 import { escapeSpacesInStringLiterals } from "../../src/runners/c/prepare-source";
-import { runCInteractive } from "../helpers/jscpp";
+import { StepLimitError, runCWithLimit } from "../helpers/jscpp";
 
 const HEADER = `---
 id: core.c.sample
@@ -188,11 +188,13 @@ describe("validateLibrary", () => {
 
 const library = loadLibraryFromDisk();
 
+// Lesson programs are small. The step limit turns a loop that never ends
+// into a failed test instead of a test run that never finishes.
 const runC: ProgramRunner = async (code, stdin): Promise<ProgramResult> => {
   try {
-    return { stdout: runCInteractive(escapeSpacesInStringLiterals(code), stdin).stdout, ok: true };
+    return { stdout: runCWithLimit(escapeSpacesInStringLiterals(code), stdin, 1_000_000).stdout, ok: true };
   } catch (error) {
-    return { stdout: "", ok: false, error: String(error) };
+    return { stdout: "", ok: false, error: String(error), ...(error instanceof StepLimitError ? { timedOut: true } : {}) };
   }
 };
 
@@ -214,6 +216,18 @@ const runPython: ProgramRunner = async (code, stdin): Promise<ProgramResult> => 
 };
 
 const RUNNERS: Partial<Record<Lesson["language"], ProgramRunner>> = { c: runC, cpp: runC, python: runPython };
+
+describe("step-limited C runner", () => {
+  it("matches a normal run", async () => {
+    const result = await runC('#include <stdio.h>\nint main() {\n    int a;\n    scanf("%d", &a);\n    printf("%d\\n", a * 2);\n    return 0;\n}', ["21"]);
+    expect(result).toEqual({ stdout: "42\n", ok: true });
+  });
+
+  it("stops a loop that never ends instead of hanging", () => {
+    const forever = '#include <stdio.h>\nint main() {\n    int n = 3;\n    while (n > 0) {\n        n = n + 0;\n    }\n    return 0;\n}';
+    expect(() => runCWithLimit(forever, [], 20_000)).toThrow(StepLimitError);
+  });
+});
 
 describe("lesson library", () => {
   beforeAll(async () => {

@@ -79,6 +79,29 @@ export function debugC(code: string, lines: readonly string[] = []): { debuggerO
   return { debuggerObject, stdout: () => stdout };
 }
 
+/** Thrown by `runCWithLimit` when a program is still going after its step budget. */
+export class StepLimitError extends Error {
+  constructor(readonly steps: number) {
+    super(`program was still running after ${steps} interpreter steps; it probably loops forever`);
+    this.name = "StepLimitError";
+  }
+}
+
+/**
+ * Runs `code` like `runCInteractive`, but gives up after `maxSteps`
+ * interpreter steps. JSCPP runs synchronously and has no time limit, so
+ * without this a program that loops forever would hang the test run.
+ */
+export function runCWithLimit(code: string, lines: readonly string[], maxSteps = 2_000_000): { stdout: string } {
+  const { debuggerObject, stdout } = debugC(code, lines);
+  const dbg = debuggerObject as { next(): unknown };
+  for (let steps = 0; steps < maxSteps; steps += 1) {
+    const result = dbg.next();
+    if (result !== false && result !== undefined) return { stdout: stdout() };
+  }
+  throw new StepLimitError(maxSteps);
+}
+
 /** The untranslated JSCPP error message for `code`, or null if it runs cleanly. */
 export function rawJscppError(code: string, stdin = ""): string | null {
   const jscpp = loadJscpp();

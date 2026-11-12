@@ -710,6 +710,15 @@
   font-family: var(--font-prose);
 }
 
+.try-hints code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
 .try-hints:empty {
   display: none;
 }
