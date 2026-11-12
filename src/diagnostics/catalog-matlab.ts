@@ -1,0 +1,212 @@
+// Explanations for MATLAB errors as reported by the RunMat runtime (see
+// spikes/matlab-messages.mjs for the raw messages). Every `tests` program is
+// run through the real runtime by tests/unit/error-catalog.test.ts.
+//
+// The runtime reports some syntax errors at line 1 whatever their real
+// position, so those entries find the line themselves or give none.
+
+import type { CatalogEntry, MatchContext } from "./types";
+
+const ML: CatalogEntry["languages"] = ["matlab"];
+
+/** First line whose text matches, or null. */
+const firstLine =
+  (pattern: RegExp) =>
+  ({ lines }: MatchContext): number | null => {
+    const index = lines.findIndex((line) => pattern.test(line));
+    return index < 0 ? null : index + 1;
+  };
+
+export const MATLAB_CATALOG: CatalogEntry[] = [
+  {
+    id: "ml.undefined-variable",
+    languages: ML,
+    pattern: /undefined variable '(?<name>\w+)'/,
+    title: (f) => `"${f.name}" has not been given a value`,
+    what: (f) => `The program uses ${f.name}, but nothing has been stored under that name yet.`,
+    why: "Either the name is misspelled, or the line that should set it comes later. Capital letters count.",
+    fix: [(f) => `Give ${f.name} a value before this line, or correct its spelling.`],
+    kid: { what: (f) => `The computer has never heard of ${f.name}.`, fix: "Make it first, or fix the spelling." },
+    example: { before: "x = 5;\ny = x + z;", after: "x = 5;\nz = 2;\ny = x + z;" },
+    tests: [{ source: "x = 5;\ny = x + z;\ndisp(y);\n", line: 2 }],
+  },
+  {
+    id: "ml.undefined-function",
+    languages: ML,
+    pattern: /Undefined function: (?<name>\w+)/,
+    title: (f) => `There is no function called "${f.name}"`,
+    what: (f) => `The program calls ${f.name}, which MATLAB does not know.`,
+    why: "The name may be misspelled, or it is your own function and its definition is missing from the file.",
+    fix: ["Check the spelling. Built-in names are lower case, for example sqrt, numel, disp.", "For your own function, add its definition at the end of the file."],
+    kid: { what: (f) => `The computer does not know how to do ${f.name}.`, fix: "Check the spelling of the name." },
+    example: { before: "y = sqroot(9);", after: "y = sqrt(9);" },
+    tests: [{ source: "y = sqroot(9);\n", line: 1 }],
+  },
+  {
+    id: "ml.index-out-of-bounds",
+    languages: ML,
+    pattern: /Index (?:(?<index>-?\d+) )?out of bounds(?: \((?<low>\d+) to (?<high>\d+)\))?/,
+    title: "Position is outside the array",
+    what: (f) =>
+      f.index && f.high
+        ? `The array has positions ${f.low} to ${f.high}. The program used position ${f.index}.`
+        : "The program used a position that the array does not have.",
+    why: "MATLAB counts from 1, not from 0 as C does. Position 0 does not exist, and neither does anything past the last element.",
+    fix: ["Use positions from 1 to numel(v) only.", "In a loop write for k = 1:numel(v) so it stops at the last element."],
+    kid: { what: "You asked for a box that is not there. Boxes are numbered from 1.", fix: "Pick a box number that exists." },
+    example: { before: "v = [10 20 30];\nfor k = 1:4\n    disp(v(k));\nend", after: "v = [10 20 30];\nfor k = 1:numel(v)\n    disp(v(k));\nend" },
+    tests: [
+      { source: "v = [1 2 3];\ndisp(v(7));\n", line: 2 },
+      { source: "v = [10 20 30];\nfor k = 1:4\n    disp(v(k));\nend\n", line: 3 },
+      { source: "v = [10 20 30];\ndisp(v(0));\n", line: 2 },
+    ],
+  },
+  {
+    id: "ml.matrix-multiply-sizes",
+    languages: ML,
+    pattern: /Inner matrix dimensions must agree: (?<left>\S+) \* (?<right>\S+)/,
+    title: "These two arrays cannot be multiplied with *",
+    what: (f) => `* is matrix multiplication. It was used on a ${f.left} array and a ${f.right} array, whose sizes do not fit.`,
+    why: "For A * B the number of columns of A must equal the number of rows of B. To multiply element by element, MATLAB uses .* instead.",
+    fix: ["To multiply matching elements, use .* instead of *.", "For true matrix multiplication, transpose one side with ' so the inner sizes agree."],
+    kid: { what: "These two lists do not fit together for *.", fix: "Use .* to multiply them piece by piece." },
+    example: { before: "x = [1 2 3] * [4 5 6];", after: "x = [1 2 3] .* [4 5 6];" },
+    tests: [{ source: "x = [1 2 3] * [4 5 6];\n" }],
+  },
+  {
+    id: "ml.sizes-do-not-match",
+    languages: ML,
+    pattern: /array sizes are not compatible/,
+    title: "The arrays are not the same size",
+    what: "Two arrays of different sizes were combined element by element.",
+    why: "Adding, subtracting or comparing arrays needs the same number of elements on both sides (or a single number on one side).",
+    fix: ["Check the sizes with size(a) and size(b).", "Make both arrays the same length."],
+    kid: { what: "One list is longer than the other.", fix: "Make both lists the same length." },
+    example: { before: "x = [1 2 3] + [1 2];", after: "x = [1 2 3] + [1 2 0];" },
+    tests: [{ source: "x = [1 2 3] + [1 2];\n" }],
+  },
+  {
+    id: "ml.missing-closing-paren",
+    languages: ML,
+    pattern: /expected '\)'/,
+    title: "Missing closing parenthesis )",
+    what: "This line opens more ( than it closes.",
+    why: "Every ( needs a matching ). With nested calls it is easy to drop the last one.",
+    fix: ["Count the ( and ) on this line and add the missing )."],
+    kid: { what: "You opened a ( but did not close it.", fix: "Add a ) to close it." },
+    example: { before: "disp((1 + 2);", after: "disp((1 + 2));" },
+    tests: [{ source: "disp((1 + 2);\n", line: 1 }],
+  },
+  {
+    id: "ml.unclosed-text",
+    languages: ML,
+    pattern: /Invalid token: '''/,
+    title: "Text is missing its closing quote '",
+    what: "A piece of text starts with a quote but has no closing quote on the same line.",
+    why: "Text in MATLAB sits between two single quotes: 'like this'.",
+    fix: ["Add the closing ' where the text should end."],
+    kid: { what: "Your words need a quote mark at both ends. One is missing.", fix: "Add ' after your words." },
+    example: { before: "disp('hello);", after: "disp('hello');" },
+    tests: [{ source: "disp('hello);\n", line: 1 }],
+  },
+  {
+    id: "ml.c-style-comment",
+    languages: ML,
+    pattern: /unexpected token: Slash/,
+    when: ({ parsed, lineText }) => parsed.line !== null && lineText(parsed.line).includes("//"),
+    title: "Comments start with %, not //",
+    what: "This line uses // to start a comment, which is the C way.",
+    why: "MATLAB comments begin with a percent sign.",
+    fix: ["Replace // with %."],
+    kid: { what: "MATLAB notes start with %.", fix: "Change // to %." },
+    example: { before: "x = 5; // set x", after: "x = 5; % set x" },
+    tests: [{ source: "x = 5; // set x\n", line: 1 }],
+  },
+  {
+    id: "ml.c-style-not-equal",
+    languages: ML,
+    pattern: /Invalid token: '!'/,
+    title: "Use ~= for \"not equal\"",
+    what: "This line uses !, which MATLAB does not have.",
+    why: "C writes != and !x. MATLAB writes ~= and ~x.",
+    fix: ["Replace != with ~= (and ! with ~)."],
+    kid: { what: "MATLAB says \"not\" with ~ instead of !.", fix: "Change != to ~=." },
+    example: { before: "if x != 3", after: "if x ~= 3" },
+    tests: [{ source: "x = 5;\nif x != 3\n    disp(x);\nend\n", line: 2 }],
+  },
+  {
+    id: "ml.assign-in-condition",
+    languages: ML,
+    pattern: /unexpected token: Assign/,
+    line: firstLine(/^\s*(if|elseif|while)\b[^=]*[^=~<>]=[^=]/),
+    title: "Use == to compare, not =",
+    what: "A single = stores a value. A condition needs ==, which asks whether two values are equal.",
+    why: "= and == look alike but do different jobs.",
+    fix: ["Change = to == in the condition."],
+    kid: { what: "= means \"put this in\". == means \"are these the same?\".", fix: "Use == when you ask a question." },
+    example: { before: "if x = 3", after: "if x == 3" },
+    tests: [{ source: "x = 3;\nif x = 3\n    disp(x);\nend\n", line: 2 }],
+  },
+  {
+    id: "ml.else-without-if",
+    languages: ML,
+    pattern: /unexpected token: Else/,
+    title: "else without a matching if",
+    what: "This else does not belong to an if block.",
+    why: "else must come inside an if ... end block, before its end.",
+    fix: ["Check that an if comes before this else and that its end comes after."],
+    kid: { what: "else is the second half of if. The first half is missing.", fix: "Put an if before this else." },
+    tests: [{ source: "x = 1;\nelse\n    disp(x);\nend\n", line: 2 }],
+  },
+  {
+    id: "ml.missing-end",
+    languages: ML,
+    pattern: /expected 'end'/,
+    // The runtime reports line 1 for this; the real place cannot be known.
+    line: () => null,
+    title: "A block is missing its end",
+    what: "An if, for, while or function was opened but never closed with end.",
+    why: "MATLAB closes every block with the word end, where C uses a closing brace.",
+    fix: ["Find the if, for, while or function without a matching end and add end after its last line."],
+    kid: { what: "You started a block but did not finish it.", fix: "Write end after the last line of the block." },
+    example: { before: "if x > 2\n    disp('big')", after: "if x > 2\n    disp('big')\nend" },
+    tests: [{ source: "x = 5;\nif x > 2\n    disp('big')\n" }],
+  },
+  {
+    id: "ml.unclosed-bracket",
+    languages: ML,
+    pattern: /unexpected end of input/,
+    line: () => null,
+    title: "Something is left open at the end of the file",
+    what: "The file ended while a [ ... ], a ( ... ) or a block was still open.",
+    why: "A closing ], ) or end is missing somewhere above.",
+    fix: ["Check each [ and ( for its closing partner.", "Check that every if, for, while and function has its end."],
+    kid: { what: "You opened something and never closed it.", fix: "Look for a missing ] or ) or end." },
+    example: { before: "v = [1 2 3;", after: "v = [1 2 3];" },
+    tests: [{ source: "v = [1 2 3;\ndisp(v);\n" }],
+  },
+  {
+    id: "ml.fprintf-missing-value",
+    languages: ML,
+    pattern: /not enough input arguments for format specifier/,
+    title: "fprintf has a placeholder with no value",
+    what: "The text given to fprintf contains a placeholder such as %d, but no value was passed to fill it.",
+    why: "Each %d, %f or %s in the text needs one value after the text.",
+    fix: ["Add one value for each placeholder: fprintf('%d\\n', x);"],
+    kid: { what: "You left a gap in the sentence but gave nothing to put in it.", fix: "Add the value after the text." },
+    example: { before: "fprintf('%d\\n');", after: "fprintf('%d\\n', x);" },
+    tests: [{ source: "fprintf('%d\\n');\n" }],
+  },
+  {
+    id: "ml.unknown",
+    languages: ML,
+    pattern: /[\s\S]*/,
+    confidence: "fallback",
+    title: "The program stopped with an error",
+    what: (f) => `MATLAB reported a problem this guide does not have an explanation for yet${f.line ? ` (line ${f.line})` : ""}.`,
+    why: "The original message below shows what was reported and where.",
+    fix: ["Read the original message; the line with the ^ marks the spot.", "Check that line for a misspelled name or a missing symbol."],
+    kid: { what: "Something went wrong and the program stopped.", fix: "Look closely at the marked line." },
+    tests: [{ source: "s = ['abc' + 1];\ndisp(s);\n" }],
+  },
+];

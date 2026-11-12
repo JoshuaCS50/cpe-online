@@ -1,0 +1,123 @@
+/* Design tokens. Both modes use the same names; only the values differ.
+   Code mode: dark terminal. Learn mode: paper, navy ink, teal accent. */
+
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+
+:root {
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-ui: var(--font-mono);
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+
+  --bar-h: 40px;
+  --status-h: 24px;
+  --rail-w: 48px;
+  --side-w: 248px;
+  --nav-h: 56px;
+  --tap: 32px;
+
+  /* Layers, lowest to highest. Nothing else sets z-index. */
+  --z-overlay: 20;
+  --z-sidebar: 30;
+  --z-dialog: 50;
+
+  --dur: 140ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Fingers need bigger targets than a mouse pointer. */
+@media (pointer: coarse) {
+  :root {
+    --tap: 44px;
+    --bar-h: 48px;
+  }
+}
+
+:root,
+:root[data-mode="code"] {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --bg-2: #141820;
+  --bg-3: #1b212c;
+  --line: #262d3a;
+  --line-strong: #37404f;
+  --ink: #d8dee9;
+  --ink-dim: #98a2b3;
+  --ink-faint: #6b7586;
+  --accent: #5fd38d;
+  --accent-ink: #06130b;
+  --accent-soft: rgb(95 211 141 / 0.14);
+  --ok: #5fd38d;
+  --warn: #e5c07b;
+  --err: #f2777a;
+  --err-soft: rgb(242 119 122 / 0.16);
+  --radius: 4px;
+  --shadow: 0 12px 32px rgb(3 6 10 / 0.55);
+}
+
+:root[data-mode="learn"] {
+  color-scheme: light;
+  --bg: #f3ecdc;
+  --bg-2: #fbf7ec;
+  --bg-3: #ece3cd;
+  --line: rgb(20 35 63 / 0.2);
+  --line-strong: #14233f;
+  --ink: #14233f;
+  --ink-dim: #4b5a75;
+  --ink-faint: #6f7c93;
+  --accent: #12776e;
+  --accent-ink: #fbf7ec;
+  --accent-soft: rgb(18 119 110 / 0.14);
+  --ok: #12776e;
+  --warn: #8a5a00;
+  --err: #a8301f;
+  --err-soft: rgb(168 48 31 / 0.12);
+  --radius: 10px;
+  --shadow: 0 12px 32px rgb(20 35 63 / 0.18);
+}
+
+/* Names the editor and terminal styles already read. */
+:root {
+  --text: var(--ink);
+  --text-faint: var(--ink-faint);
+  --accent-strong: var(--accent);
+  --danger: var(--err);
+  --mono: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+  }
+}
+
+/* Light palette for Code mode. */
+:root[data-mode="code"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --bg-2: #eceef2;
+  --bg-3: #e1e5eb;
+  --line: #d0d5de;
+  --line-strong: #a9b1bf;
+  --ink: #1b2230;
+  --ink-dim: #465063;
+  --ink-faint: #667085;
+  --accent: #0c7040;
+  --accent-ink: #f6f7f9;
+  --accent-soft: rgb(12 112 64 / 0.13);
+  --ok: #0c7040;
+  --warn: #8a5a00;
+  --err: #b3261e;
+  --err-soft: rgb(179 38 30 / 0.12);
+  --shadow: 0 12px 32px rgb(27 34 48 / 0.18);
+}

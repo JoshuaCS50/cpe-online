@@ -1,0 +1,122 @@
+/* Editor colours. Each app theme sets these variables; the editor reads them. */
+
+:root {
+  /* VS Code Dark+ */
+  --editor-selection: rgba(38, 79, 120, 0.85);
+  --editor-active-line: rgba(255, 255, 255, 0.045);
+  --editor-bracket: rgba(255, 255, 255, 0.16);
+  --syn-keyword: #569cd6;
+  --syn-type: #4ec9b0;
+  --syn-string: #ce9178;
+  --syn-number: #b5cea8;
+  --syn-comment: #6a9955;
+  --syn-function: #dcdcaa;
+  --syn-preproc: #c586c0;
+  --syn-operator: #d4d4d4;
+  --syn-escape: #d7ba7d;
+}
+
+:root.theme-catppuccin {
+  --editor-selection: rgba(88, 91, 112, 0.7);
+  --editor-active-line: rgba(205, 214, 244, 0.05);
+  --editor-bracket: rgba(205, 214, 244, 0.18);
+  --syn-keyword: #cba6f7;
+  --syn-type: #f9e2af;
+  --syn-string: #a6e3a1;
+  --syn-number: #fab387;
+  --syn-comment: #7f849c;
+  --syn-function: #89b4fa;
+  --syn-preproc: #f5c2e7;
+  --syn-operator: #89dceb;
+  --syn-escape: #f2cdcd;
+}
+
+:root.theme-light {
+  --editor-selection: rgba(173, 214, 255, 0.9);
+  --editor-active-line: rgba(0, 0, 0, 0.04);
+  --editor-bracket: rgba(0, 0, 0, 0.12);
+  --syn-keyword: #0000ff;
+  --syn-type: #267f99;
+  --syn-string: #a31515;
+  --syn-number: #098658;
+  --syn-comment: #008000;
+  --syn-function: #795e26;
+  --syn-preproc: #af00db;
+  --syn-operator: #1f1f1f;
+  --syn-escape: #ee0000;
+}
+
+@media (prefers-color-scheme: light) {
+  :root.theme-auto {
+    --editor-selection: rgba(173, 214, 255, 0.9);
+    --editor-active-line: rgba(0, 0, 0, 0.04);
+    --editor-bracket: rgba(0, 0, 0, 0.12);
+    --syn-keyword: #0000ff;
+    --syn-type: #267f99;
+    --syn-string: #a31515;
+    --syn-number: #098658;
+    --syn-comment: #008000;
+    --syn-function: #795e26;
+    --syn-preproc: #af00db;
+    --syn-operator: #1f1f1f;
+    --syn-escape: #ee0000;
+  }
+}
+
+/* Line reported by the compiler or runtime. */
+.cm-editor .cm-error-line {
+  background: rgba(243, 139, 168, 0.18);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+/* Line the debugger is paused on. */
+.cm-editor .cm-exec-line {
+  background: rgba(255, 204, 0, 0.2);
+  box-shadow: inset 3px 0 0 #ffcc00;
+}
+
+/* Breakpoint gutter: wide enough to tap on a phone. */
+.cm-editor .cm-breakpoint-gutter {
+  width: 22px;
+  cursor: pointer;
+}
+
+.cm-editor .cm-breakpoint-gutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-editor .cm-breakpoint-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e51400;
+  box-shadow: 0 0 0 2px rgba(229, 20, 0, 0.25);
+}
+
+/* Visible, draggable scrollbars on touch screens. */
+.cm-editor .cm-scroller {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, 0.4);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.cm-editor .cm-scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}

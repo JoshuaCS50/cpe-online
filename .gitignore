@@ -5,9 +5,19 @@
 .DS_Store
 Thumbs.db
 
+# Build
+node_modules/
+dist/
+
+# MATLAB runtime, copied from node_modules by scripts/vendor-runmat.mjs
+public/vendor/runmat/
+
 # Logs
 *.log
 npm-debug.log*
+
+# Brief copied into the sandbox clone for a hosted-model run
+/BRIEF.md
 
 # Plan file (kept local)
 plan.md

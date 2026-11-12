@@ -1,0 +1,21 @@
+# Cloudflare Pages response headers.
+# Cross-origin isolation enables SharedArrayBuffer, which lets a running
+# program pause for typed input and lets the Python debugger pause.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+
+# Build files carry a hash in their name, so they never change.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The MATLAB runtime sits in a folder named after its version.
+/vendor/runmat/*/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# These keep their name across releases and must be checked each time.
+/sw.js
+  Cache-Control: no-cache
+/vendor/runmat/runtime.json
+  Cache-Control: no-cache

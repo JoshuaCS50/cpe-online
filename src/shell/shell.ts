@@ -1,0 +1,676 @@
+// The IDE shell: title bar, activity rail, explorer, editor with tabs,
+// terminal panel and status bar. Layout adapts in three tiers (phone, tablet,
+// laptop) through data attributes on the root; CSS does the rest.
+
+import "../theme/tokens.css";
+import "./shell.css";
+
+import { createDebugView } from "../debugger/debug-view";
+import { explainError } from "../diagnostics/engine";
+import { createErrorCard } from "../diagnostics/error-card";
+import type { ErrorExplanation, RawError } from "../diagnostics/types";
+import type { FileRecord } from "../storage/types";
+import type { DebugCommand, DebugSession } from "../debugger/types";
+import { createEditor } from "../editor/editor";
+import type { EditorHandle } from "../editor/editor";
+import { createSymbolBar } from "../editor/symbol-bar";
+import { canStop, runProgram } from "../runners/run";
+import { debugCInWorker } from "../runners/c/c-runner";
+import { canBlockForInput } from "../runners/input-channel";
+import { debugPythonInWorker } from "../runners/python/python-runner";
+import { openStore } from "../storage/idb-store";
+import { migrateLegacyState } from "../storage/migrate-localstorage";
+import { loadSettings, saveSettings } from "../storage/settings";
+import { createConsole } from "../terminal/console";
+import { button, el } from "./dom";
+import { createEditorTabs } from "./editor-tabs";
+import { createExamplesView } from "./examples-view";
+import { createExplorer } from "./explorer";
+import { icon } from "./icons";
+import { createReferenceView } from "./reference-view";
+import { createSettingsView } from "./settings-view";
+import { openWorkspace } from "./workspace";
+
+type Tier = "phone" | "tablet" | "laptop";
+/** On a phone only one of these fills the screen at a time. */
+type View = "files" | "code" | "terminal";
+/** What the side panel is showing. */
+type SideView = "files" | "examples" | "reference" | "settings";
+
+const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java", matlab: "MATLAB" };
+
+function currentTier(): Tier {
+  if (window.matchMedia("(max-width: 599px)").matches) return "phone";
+  if (window.matchMedia("(max-width: 1023px)").matches) return "tablet";
+  return "laptop";
+}
+
+export async function bootShell(): Promise<void> {
+  const root = document.documentElement;
+  root.dataset.mode = "code";
+
+  const store = await openStore();
+  const migration = await migrateLegacyState(store, window.localStorage);
+  if (migration.status === "failed") console.warn("Could not import earlier drafts:", migration.error);
+  const workspace = await openWorkspace(store);
+
+  // ───── Frame ─────
+
+  const pathEl = el("span", { class: "title-path" });
+  const runButton = button({ label: "Run", icon: "play", showLabel: true, class: "btn btn-run", onClick: () => void run() });
+  const stopButton = button({ label: "Stop", icon: "stop", showLabel: true, class: "btn btn-stop", onClick: () => stop() });
+  const debugButton = button({ label: "Debug", icon: "bug", showLabel: true, class: "btn btn-outline btn-debug", onClick: () => void debug() });
+  runButton.title = "Run (F5)";
+  debugButton.title = "Debug: run and pause at breakpoints (F6)";
+  stopButton.title = "Stop (Shift+F5)";
+  stopButton.disabled = true;
+
+  // Shown only while a debug session is active; enabled only while paused.
+  const stepButton = (label: string, iconName: "resume" | "stepOver" | "stepInto" | "stepOut", command: DebugCommand): HTMLButtonElement =>
+    button({ label, icon: iconName, class: "btn btn-icon btn-step", onClick: () => session?.command(command) });
+  const stepButtons = [
+    stepButton("Continue (F5)", "resume", "continue"),
+    stepButton("Step over (F10)", "stepOver", "stepOver"),
+    stepButton("Step into (F11)", "stepInto", "stepInto"),
+    stepButton("Step out (Shift+F11)", "stepOut", "stepOut"),
+  ];
+  for (const node of stepButtons) node.disabled = true;
+  const debugControls = el("div", { class: "debug-controls", role: "toolbar", "aria-label": "Debugger" }, stepButtons);
+
+  const titleBar = el("header", { class: "titlebar" }, [
+    el("span", { class: "brand" }, [
+      el("span", { class: "brand-mark", "aria-hidden": "true" }, [">_"]),
+      el("span", { class: "brand-name" }, ["cpe-online"]),
+    ]),
+    pathEl,
+    el("div", { class: "title-actions" }, [runButton, debugButton, debugControls, stopButton]),
+  ]);
+
+  // The side panel shows one view at a time. The rail picks it on tablets and
+  // laptops; phones get a row of tabs at the top of the panel instead.
+  const SIDE_VIEWS: { id: SideView; label: string; icon: "files" | "bulb" | "book" | "settings" }[] = [
+    { id: "files", label: "Explorer", icon: "files" },
+    { id: "examples", label: "Examples", icon: "bulb" },
+    { id: "reference", label: "Reference", icon: "book" },
+    { id: "settings", label: "Settings", icon: "settings" },
+  ];
+  const sideSections = new Map<SideView, HTMLElement>();
+  const railButtons = new Map<SideView, HTMLButtonElement>();
+  const sideTabs = el("div", { class: "side-tabs", role: "tablist", "aria-label": "Side panel" });
+  for (const view of SIDE_VIEWS) {
+    sideSections.set(view.id, el("section", { class: "side-view", "data-side": view.id, "aria-label": view.label }));
+    railButtons.set(
+      view.id,
+      button({ label: view.label, icon: view.icon, class: "rail-btn", onClick: () => pickSideView(view.id) }),
+    );
+    const tab = el("button", { type: "button", class: "side-tab", role: "tab", "data-side": view.id }, [view.label]);
+    tab.addEventListener("click", () => showSideView(view.id));
+    sideTabs.append(tab);
+  }
+  const sideSection = (id: SideView): HTMLElement => sideSections.get(id) as HTMLElement;
+
+  const terminalToggle = button({
+    label: "Terminal (Ctrl+J)",
+    icon: "terminal",
+    class: "rail-btn",
+    onClick: () => togglePanel(),
+  });
+  const rail = el("nav", { class: "rail", "aria-label": "Views" }, [
+    ...SIDE_VIEWS.filter((view) => view.id !== "settings").map((view) => railButtons.get(view.id) as HTMLElement),
+    terminalToggle,
+    el("span", { class: "rail-spacer" }),
+    railButtons.get("settings") as HTMLElement,
+  ]);
+
+  const sidebar = el("aside", { class: "sidebar", "aria-label": "Side panel" }, [sideTabs, ...sideSections.values()]);
+  const scrim = el("div", { class: "scrim" });
+  scrim.addEventListener("click", () => setSidebar(false));
+
+  const tabsEl = el("div", { class: "tabs" });
+  const symbolsEl = el("div", { class: "symbols" });
+  const editorHost = el("div", { class: "editor-host" });
+  const emptyEditor = el("div", { class: "editor-empty" }, [
+    el("p", {}, ["No file is open."]),
+    button({
+      label: "New file",
+      icon: "plus",
+      showLabel: true,
+      class: "btn btn-outline",
+      onClick: () => void workspace.createFile(),
+    }),
+  ]);
+  const editorPane = el("section", { class: "editor-pane", "aria-label": "Editor" }, [
+    tabsEl,
+    symbolsEl,
+    editorHost,
+    emptyEditor,
+  ]);
+
+  const splitter = el("div", {
+    class: "splitter",
+    role: "separator",
+    tabindex: "0",
+    "aria-orientation": "horizontal",
+    "aria-label": "Resize terminal",
+  });
+
+  const outputEl = el("pre", { class: "output", role: "log", "aria-live": "polite", "aria-label": "Terminal output" });
+  const debugPane = el("aside", { class: "debug-pane", "aria-label": "Debugger" });
+  // The panel has two tabs: the terminal, and the list of problems from the last run.
+  const problemsEl = el("div", { class: "problems", role: "list", "aria-label": "Problems" });
+  const problemsCount = el("span", { class: "panel-count" });
+  const terminalTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Terminal"]);
+  const problemsTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Problems", problemsCount]);
+  terminalTab.addEventListener("click", () => showPanelTab("terminal"));
+  problemsTab.addEventListener("click", () => showPanelTab("problems"));
+
+  const panel = el("section", { class: "panel", "aria-label": "Terminal and problems" }, [
+    el("div", { class: "panel-header" }, [
+      el("div", { class: "panel-tabs", role: "tablist" }, [terminalTab, problemsTab]),
+      el("div", { class: "panel-actions" }, [
+        button({ label: "Copy output", icon: "copy", class: "btn btn-icon btn-quiet", onClick: () => void copyOutput() }),
+        button({ label: "Clear terminal", icon: "eraser", class: "btn btn-icon btn-quiet", onClick: () => consoleIO.clear() }),
+      ]),
+    ]),
+    el("div", { class: "panel-body" }, [outputEl, problemsEl, debugPane]),
+  ]);
+
+  const main = el("main", { class: "main" }, [editorPane, splitter, panel]);
+
+  const storageChip = el("span", { class: "status-item" });
+  const isolationChip = el("span", { class: "status-item is-warning" });
+  const runChip = el("span", { class: "status-item", role: "status" }, ["Ready"]);
+  const cursorChip = el("span", { class: "status-item" });
+  const languageChip = el("span", { class: "status-item" });
+  const onlineChip = el("span", { class: "status-item" });
+  const statusBar = el("footer", { class: "statusbar" }, [
+    storageChip,
+    isolationChip,
+    runChip,
+    el("span", { class: "status-spacer" }),
+    cursorChip,
+    languageChip,
+    onlineChip,
+  ]);
+
+  const navButton = (view: View, label: string, iconName: "files" | "code" | "terminal"): HTMLButtonElement => {
+    const node = el("button", { type: "button", class: "nav-btn", "data-view": view }, [icon(iconName), el("span", {}, [label])]);
+    node.addEventListener("click", () => setView(view));
+    return node;
+  };
+  const bottomNav = el("nav", { class: "bottom-nav", "aria-label": "Screens" }, [
+    navButton("files", "Files", "files"),
+    navButton("code", "Code", "code"),
+    navButton("terminal", "Terminal", "terminal"),
+  ]);
+
+  const shell = el("div", { class: "shell" }, [titleBar, rail, sidebar, scrim, main, statusBar, bottomNav]);
+
+  document.body.replaceChildren(shell);
+
+  // ───── Layout state ─────
+
+  let sideView: SideView = "files";
+
+  function syncSideControls(): void {
+    const open = shell.dataset.sidebar === "open";
+    for (const [id, node] of railButtons) node.setAttribute("aria-pressed", String(open && id === sideView));
+    for (const tab of sideTabs.children) {
+      tab.setAttribute("aria-selected", String((tab as HTMLElement).dataset.side === sideView));
+    }
+  }
+  function setSidebar(open: boolean): void {
+    shell.dataset.sidebar = open ? "open" : "closed";
+    syncSideControls();
+  }
+  function toggleSidebar(): void {
+    setSidebar(shell.dataset.sidebar !== "open");
+  }
+  function showSideView(view: SideView): void {
+    sideView = view;
+    shell.dataset.side = view;
+    syncSideControls();
+  }
+  /** Rail behaviour: picking the view that is already showing closes the panel. */
+  function pickSideView(view: SideView): void {
+    if (shell.dataset.sidebar === "open" && sideView === view) {
+      setSidebar(false);
+    } else {
+      showSideView(view);
+      setSidebar(true);
+    }
+  }
+  function setPanel(open: boolean): void {
+    shell.dataset.panel = open ? "open" : "closed";
+    terminalToggle.setAttribute("aria-pressed", String(open));
+  }
+  function togglePanel(): void {
+    setPanel(shell.dataset.panel !== "open");
+  }
+  function setView(view: View): void {
+    shell.dataset.view = view;
+    for (const node of bottomNav.querySelectorAll<HTMLButtonElement>(".nav-btn")) {
+      node.setAttribute("aria-current", node.dataset.view === view ? "page" : "false");
+    }
+  }
+  function applyTier(): void {
+    const tier = currentTier();
+    if (root.dataset.tier === tier) return;
+    root.dataset.tier = tier;
+    // The explorer is docked on a laptop and an overlay elsewhere, so it
+    // starts open only where it does not cover the editor.
+    setSidebar(tier === "laptop");
+  }
+
+  setPanel(true);
+  setView("code");
+  applyTier();
+  window.addEventListener("resize", applyTier);
+
+  // Terminal height: drag the splitter, or use the arrow keys on it.
+  function setPanelHeight(px: number): void {
+    const max = Math.max(120, main.clientHeight - 120);
+    shell.style.setProperty("--panel-h", `${Math.round(Math.min(max, Math.max(96, px)))}px`);
+  }
+  splitter.addEventListener("pointerdown", (event) => {
+    splitter.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent): void => setPanelHeight(main.getBoundingClientRect().bottom - moveEvent.clientY);
+    const end = (): void => {
+      splitter.removeEventListener("pointermove", move);
+      splitter.removeEventListener("pointerup", end);
+      splitter.removeEventListener("pointercancel", end);
+    };
+    splitter.addEventListener("pointermove", move);
+    splitter.addEventListener("pointerup", end);
+    splitter.addEventListener("pointercancel", end);
+  });
+  splitter.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    setPanelHeight(panel.getBoundingClientRect().height + (event.key === "ArrowUp" ? 24 : -24));
+  });
+
+  // ───── Editor, explorer, tabs ─────
+
+  let loadedFileId: string | null = null;
+  let loading = false;
+
+  const editor: EditorHandle = createEditor(editorHost, {
+    onChange: (doc) => {
+      if (!loading && loadedFileId !== null) workspace.updateDoc(loadedFileId, doc);
+    },
+    onCursor: ({ line, col }) => {
+      cursorChip.textContent = `Ln ${line}, Col ${col}`;
+    },
+    onBreakpointsChange: (lines) => {
+      if (loading || loadedFileId === null) return;
+      breakpointsByFile.set(loadedFileId, lines);
+      if (session && loadedFileId === debugFileId) session.setBreakpoints(lines);
+    },
+  });
+
+  /** Breakpoints live per file for this visit. */
+  const breakpointsByFile = new Map<string, number[]>();
+  let session: DebugSession | null = null;
+  let debugFileId: string | null = null;
+  let pausedLine: number | null = null;
+
+  const debugView = createDebugView(debugPane, {
+    onRevealLine: (line) => {
+      if (debugFileId !== null) workspace.open(debugFileId);
+      editor.setExecLine(line);
+    },
+  });
+  const symbolBar = createSymbolBar(symbolsEl, () => (loadedFileId === null ? null : editor));
+
+  /** After a file is chosen, get the side panel out of the way where it covers the editor. */
+  const revealEditor = (): void => {
+    if (root.dataset.tier === "phone") setView("code");
+    else if (root.dataset.tier === "tablet") setSidebar(false);
+  };
+  createExplorer(sideSection("files"), { workspace, onOpen: revealEditor });
+  createExamplesView(sideSection("examples"), { workspace, onOpen: revealEditor });
+  createReferenceView(sideSection("reference"));
+  createEditorTabs(tabsEl, workspace);
+
+  // ───── Settings ─────
+
+  let settings = await loadSettings(store);
+  const systemLight = window.matchMedia("(prefers-color-scheme: light)");
+
+  function applySettings(): void {
+    const light = settings.theme === "light" || (settings.theme === "auto" && systemLight.matches);
+    root.dataset.theme = light ? "light" : "dark";
+    // The editor's syntax colours are keyed on this class.
+    root.classList.toggle("theme-light", light);
+    editor.setFontSize(settings.fontSize);
+    editor.setWrap(settings.wrap);
+    outputEl.classList.toggle("no-wrap", !settings.outputWrap);
+  }
+
+  createSettingsView(sideSection("settings"), {
+    settings,
+    onChange: (patch) => {
+      settings = { ...settings, ...patch };
+      applySettings();
+      // Save the whole object, not the patch: two quick changes would
+      // otherwise each merge into the old stored value and one would be lost.
+      void saveSettings(store, settings).catch(console.warn);
+    },
+  });
+  systemLight.addEventListener("change", applySettings);
+  applySettings();
+  showSideView("files");
+
+  function syncEditor(): void {
+    const file = workspace.activeFile;
+    editorPane.classList.toggle("is-empty", file === null);
+    runButton.disabled = running || file === null;
+    debugButton.disabled = running || !canDebug(file?.language);
+    if (!file) {
+      loadedFileId = null;
+      pathEl.textContent = "";
+      languageChip.textContent = "";
+      return;
+    }
+    pathEl.textContent = `~/${workspace.project.name.toLowerCase().replace(/\s+/g, "-")}/${file.name}`;
+    languageChip.textContent = LANGUAGE_LABELS[file.language] ?? file.language;
+    symbolBar.setLanguage(file.language);
+    if (file.id !== loadedFileId) {
+      loading = true;
+      loadedFileId = file.id;
+      editor.setDoc(file.doc);
+      editor.setBreakpoints(breakpointsByFile.get(file.id) ?? []);
+      loading = false;
+      // The paused-line marker belongs to the file being debugged.
+      editor.setExecLine(file.id === debugFileId ? pausedLine : null);
+    }
+    // Renaming a file can change its language without changing the file.
+    editor.setLanguage(file.language);
+  }
+
+  // ───── Terminal and running ─────
+
+  const consoleIO = createConsole({ outputEl });
+  let running = false;
+  let abort: AbortController | null = null;
+
+  /** Python pauses by sleeping on shared memory, so it needs cross-origin isolation. */
+  function canDebug(language: string | undefined): boolean {
+    return language === "c" || language === "cpp" || (language === "python" && canBlockForInput());
+  }
+
+  function setRunning(next: boolean, language?: string): void {
+    running = next;
+    runButton.disabled = next || workspace.activeFile === null;
+    debugButton.disabled = next || !canDebug(workspace.activeFile?.language);
+    stopButton.disabled = !next || !canStop(language);
+    shell.dataset.running = String(next);
+    consoleIO.setInputActive(next);
+  }
+
+  function setPaused(line: number | null): void {
+    pausedLine = line;
+    shell.dataset.paused = String(line !== null);
+    for (const node of stepButtons) node.disabled = line === null;
+    if (loadedFileId === debugFileId) editor.setExecLine(line);
+  }
+
+  // ───── Problems: errors from the last run, explained ─────
+
+  interface Problem {
+    explanation: ErrorExplanation;
+    fileId: string;
+    fileName: string;
+  }
+  let problems: Problem[] = [];
+
+  function showPanelTab(tab: "terminal" | "problems"): void {
+    shell.dataset.panelTab = tab;
+    terminalTab.setAttribute("aria-selected", String(tab === "terminal"));
+    problemsTab.setAttribute("aria-selected", String(tab === "problems"));
+  }
+
+  function jumpToProblem(problem: Problem): void {
+    workspace.open(problem.fileId);
+    if (problem.explanation.line !== null) editor.highlightErrorLine(problem.explanation.line);
+    if (root.dataset.tier === "phone") setView("code");
+  }
+
+  function renderProblems(): void {
+    problemsCount.textContent = problems.length > 0 ? String(problems.length) : "";
+    if (problems.length === 0) {
+      problemsEl.replaceChildren(el("p", { class: "problems-empty" }, ["No problems in the last run."]));
+      return;
+    }
+    problemsEl.replaceChildren(
+      ...problems.map((problem) => {
+        const { title, line, column } = problem.explanation;
+        const where = line === null ? problem.fileName : `${problem.fileName}:${line}${column !== null ? `:${column}` : ""}`;
+        const row = el("button", { type: "button", class: "problem-row", role: "listitem" }, [
+          icon("alertTriangle"),
+          el("span", { class: "problem-title" }, [title]),
+          el("span", { class: "problem-where" }, [where]),
+        ]);
+        row.addEventListener("click", () => jumpToProblem(problem));
+        return row;
+      }),
+    );
+  }
+
+  function clearProblems(): void {
+    problems = [];
+    renderProblems();
+    showPanelTab("terminal");
+  }
+
+  /** Explains a runtime's error, shows the card in the terminal and lists it under Problems. */
+  function reportError(file: FileRecord, raw: RawError): void {
+    const explanation = explainError(raw, file.doc);
+    const problem: Problem = { explanation, fileId: file.id, fileName: file.name };
+    if (explanation.line !== null && workspace.activeFile?.id === file.id) editor.highlightErrorLine(explanation.line);
+    const card = createErrorCard(explanation, { fileName: file.name, onJump: () => jumpToProblem(problem) });
+    consoleIO.appendElement(card);
+    // The terminal follows new output to the bottom; a card is read from its top.
+    card.scrollIntoView({ block: "start" });
+    problems = [...problems, problem];
+    renderProblems();
+  }
+
+  renderProblems();
+  showPanelTab("terminal");
+
+  async function debug(): Promise<void> {
+    const file = workspace.activeFile;
+    if (running || !file || !canDebug(file.language)) return;
+    // Claim the run before the first await, or a second click could start another.
+    running = true;
+    await workspace.flush();
+    editor.clearErrorLine();
+    clearProblems();
+    consoleIO.clear();
+    consoleIO.cancelPendingReads();
+    setPanel(true);
+    setRunning(true, file.language);
+    shell.dataset.debugging = "true";
+    debugFileId = file.id;
+    // Line numbers must keep meaning what they meant when the program started.
+    editor.setReadOnly(true);
+    setPaused(null);
+    debugView.showRunning();
+    runChip.textContent = `Debugging ${file.name}`;
+
+    const phone = (): boolean => root.dataset.tier === "phone";
+    const startDebug = file.language === "python" ? debugPythonInWorker : debugCInWorker;
+    session = startDebug({
+      code: file.doc,
+      // On a phone the terminal is a separate screen: go there when the
+      // program asks for input, and come back to the code when it pauses.
+      consoleIO: {
+        ...consoleIO,
+        readLine: () => {
+          if (phone()) setView("terminal");
+          return consoleIO.readLine();
+        },
+      },
+      breakpoints: breakpointsByFile.get(file.id) ?? [],
+      onErrorLine: (line) => editor.highlightErrorLine(line),
+      onError: (text) => reportError(file, { language: file.language, text }),
+      listener: {
+        onPaused: (state) => {
+          if (workspace.activeFile?.id !== debugFileId && debugFileId !== null) workspace.open(debugFileId);
+          if (phone()) setView("code");
+          setPaused(state.line);
+          debugView.showPaused(state);
+          runChip.textContent = `Paused at line ${state.line}`;
+        },
+        onResumed: () => {
+          setPaused(null);
+          debugView.showRunning();
+          runChip.textContent = `Debugging ${file.name}`;
+        },
+      },
+    });
+
+    const result = await session.finished;
+    session = null;
+    setPaused(null);
+    debugFileId = null;
+    editor.setReadOnly(false);
+    shell.dataset.debugging = "false";
+    debugView.reset();
+    setRunning(false);
+    consoleIO.resetInput();
+    runChip.textContent = result.stopped ? "Stopped" : result.ok ? "Finished" : "Failed";
+  }
+
+  async function run(): Promise<void> {
+    const file = workspace.activeFile;
+    if (running || !file) return;
+    // Claim the run before the first await, or a second click could start another.
+    running = true;
+    await workspace.flush();
+    editor.clearErrorLine();
+    clearProblems();
+    consoleIO.clear();
+    consoleIO.cancelPendingReads();
+    setPanel(true);
+    if (root.dataset.tier === "phone") setView("terminal");
+    setRunning(true, file.language);
+    runChip.textContent = `Running ${file.name}`;
+    abort = new AbortController();
+    let outcome = "Finished";
+    try {
+      const result = await runProgram({
+        language: file.language,
+        code: file.doc,
+        fileName: file.name,
+        consoleIO,
+        signal: abort.signal,
+        onError: (error) => reportError(file, error),
+      });
+      if (result.stopped) outcome = "Stopped";
+      else if (!result.ok) outcome = "Failed";
+    } catch (error) {
+      consoleIO.writeErr("\n" + (error instanceof Error ? error.message : String(error)) + "\n");
+      outcome = "Failed";
+    } finally {
+      abort = null;
+      setRunning(false);
+      consoleIO.resetInput();
+      runChip.textContent = outcome;
+    }
+  }
+
+  function stop(): void {
+    if (!running) return;
+    consoleIO.cancelPendingReads(new Error("Stopped by user"));
+    abort?.abort();
+    session?.stop();
+    consoleIO.writeInfo("\n[stopped]\n");
+  }
+
+  async function copyOutput(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(outputEl.textContent ?? "");
+      runChip.textContent = "Output copied";
+    } catch {
+      runChip.textContent = "Copy was blocked by the browser";
+    }
+  }
+
+  // ───── Status bar ─────
+
+  storageChip.replaceChildren(
+    icon(store.persistent ? "database" : "databaseOff"),
+    store.persistent ? "Saved on this device" : "Not saved: private window",
+  );
+  if (!store.persistent) storageChip.classList.add("is-warning");
+
+  // Without cross-origin isolation programs still run, but cannot wait for
+  // typed input and Python cannot be debugged. Say so instead of failing quietly.
+  if (!canBlockForInput()) {
+    isolationChip.replaceChildren(icon("alertTriangle"), "Typed input is unavailable on this address");
+    isolationChip.title = "This site is not cross-origin isolated, so running programs cannot pause for input.";
+  }
+
+  // A newer version of the app has been installed by the service worker.
+  document.addEventListener("cpe:updated", () => {
+    runChip.textContent = "New version ready. Reload to use it.";
+  });
+
+  function syncOnline(): void {
+    onlineChip.replaceChildren(icon(navigator.onLine ? "wifi" : "wifiOff"), navigator.onLine ? "Online" : "Offline");
+  }
+  window.addEventListener("online", syncOnline);
+  window.addEventListener("offline", syncOnline);
+  syncOnline();
+
+  // ───── Keyboard ─────
+
+  window.addEventListener("keydown", (event) => {
+    const command = event.ctrlKey || event.metaKey;
+    if (event.key === "F5" && event.shiftKey) {
+      event.preventDefault();
+      stop();
+    } else if (event.key === "F5" || (command && event.key === "Enter")) {
+      event.preventDefault();
+      // While paused in the debugger, F5 means "carry on".
+      if (session) session.command("continue");
+      else void run();
+    } else if (event.key === "F6") {
+      event.preventDefault();
+      void debug();
+    } else if (event.key === "F10" && session) {
+      event.preventDefault();
+      session.command("stepOver");
+    } else if (event.key === "F11" && session) {
+      event.preventDefault();
+      session.command(event.shiftKey ? "stepOut" : "stepInto");
+    } else if (command && event.key.toLowerCase() === "b") {
+      event.preventDefault();
+      toggleSidebar();
+    } else if (command && event.key.toLowerCase() === "j") {
+      event.preventDefault();
+      togglePanel();
+    } else if (command && event.key.toLowerCase() === "s") {
+      // Files save themselves; stop the browser's "save page" dialog.
+      event.preventDefault();
+      void workspace.flush();
+    }
+  });
+
+  // Do not lose the last keystrokes when the tab is closed or hidden.
+  window.addEventListener("pagehide", () => void workspace.flush());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") void workspace.flush();
+  });
+
+  workspace.subscribe(syncEditor);
+  syncEditor();
+
+  // Handle for manual checks in the dev server console; absent in builds.
+  if (import.meta.env.DEV) {
+    (window as unknown as { __cpe: unknown }).__cpe = { editor, workspace, store, consoleIO };
+  }
+}
