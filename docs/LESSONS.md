@@ -86,7 +86,12 @@ Not checked, but expected: one idea per sentence, a concrete picture (a box, a h
 - runs each starter: it must not pass;
 - runs each example: it must finish without an error and print something.
 
-The C interpreter is stricter than a desktop compiler in places. Known so far: write `int main()`, not `int main(void)`, and avoid `scanf("%c", ...)`.
+The C interpreter is stricter than a desktop compiler in places. Known so far:
+
+- Write `int main()`, not `int main(void)`.
+- Avoid `scanf("%c", ...)`.
+- There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.
+- Comparisons and `&&`, `||`, `!` give 1 or 0 as in real C, including when printed with `%d` or stored in an `int`. This relies on two patches in `scripts/patch-jscpp.mjs`; `tests/unit/jscpp-comparisons.test.ts` guards them.
 
 ## Adding a unit
 

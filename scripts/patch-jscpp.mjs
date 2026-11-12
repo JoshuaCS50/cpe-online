@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Builds public/vendor/JSCPP.es5.min.js from the untouched upstream bundle in
-// vendor-src/, with one behaviour change: input is pulled on demand.
+// vendor-src/, with two behaviour changes: input is pulled on demand, and
+// printf prints the result of a comparison as 1 or 0.
 //
 // Upstream reads all of stdin once, when <stdio.h> or <iostream> is loaded, so
 // a program can never ask for more input while it runs. The patched build
@@ -69,6 +70,27 @@ const PATCHES = [
     `c=b.v.buf,b.v.eofbit=0===c.length,`,
     `c=b.v.buf,c.length>0||(c=b.v.buf=b.v.istream.drain()||""),b.v.eofbit=0===c.length,`,
   ],
+  // Comparisons and && || ! produce JavaScript booleans inside the
+  // interpreter. In C they are the int values 1 and 0, so printf("%d", a < b)
+  // must print 1, not stop with "format argument 'true' not an integer".
+  [
+    "cast to int, char, float...: a comparison result becomes 1 or 0, so `int t = a < b; if (t == 1)` works",
+    1,
+    `if("bool"===a.name)return this.val(a,b.v?1:0);`,
+    `if("bool"===a.name)return this.val(a,b.v?1:0);"boolean"==typeof b.v&&(b=this.val(b.t,b.v?1:0));`,
+  ],
+  [
+    "printf %d %i %u %x %o: print a comparison result as 1 or 0",
+    1,
+    `f.prototype.formatInt=function(a){var b=parseInt(a.arg);`,
+    `f.prototype.formatInt=function(a){"boolean"==typeof a.arg&&(a.arg=+a.arg);var b=parseInt(a.arg);`,
+  ],
+  [
+    "printf %f %e %g: print a comparison result as 1 or 0",
+    1,
+    `f.prototype.formatDouble=function(a){var b=parseFloat(a.arg);`,
+    `f.prototype.formatDouble=function(a){"boolean"==typeof a.arg&&(a.arg=+a.arg);var b=parseFloat(a.arg);`,
+  ],
 ];
 
 let text = readFileSync(SOURCE, "utf8");
@@ -82,6 +104,6 @@ for (const [description, expected, search, replacement] of PATCHES) {
 }
 
 const banner =
-  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand. */\n";
+  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; printf prints comparisons as 1 or 0. */\n";
 writeFileSync(TARGET, banner + text);
 console.log(`Wrote ${TARGET} (${PATCHES.length} patches applied).`);
