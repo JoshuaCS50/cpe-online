@@ -9,7 +9,7 @@ import { createDebugView } from "../debugger/debug-view";
 import { explainError } from "../diagnostics/engine";
 import { createErrorCard } from "../diagnostics/error-card";
 import type { ErrorExplanation, RawError } from "../diagnostics/types";
-import type { FileRecord } from "../storage/types";
+import type { AppStore, FileRecord, Settings } from "../storage/types";
 import type { DebugCommand, DebugSession } from "../debugger/types";
 import { createEditor } from "../editor/editor";
 import type { EditorHandle } from "../editor/editor";
@@ -27,6 +27,8 @@ import { createEditorTabs } from "./editor-tabs";
 import { createExamplesView } from "./examples-view";
 import { createExplorer } from "./explorer";
 import { icon } from "./icons";
+import { createModeSwitch } from "./mode-switch";
+import type { Mode } from "./mode-switch";
 import { createReferenceView } from "./reference-view";
 import { createSettingsView } from "./settings-view";
 import { openWorkspace } from "./workspace";
@@ -45,7 +47,20 @@ function currentTier(): Tier {
   return "laptop";
 }
 
-export async function bootShell(): Promise<void> {
+/** What the rest of the app may ask of the IDE shell. */
+export interface ShellHandle {
+  store: AppStore;
+  getSettings(): Settings;
+  /** Applies and saves a change to the settings. */
+  updateSettings(patch: Partial<Settings>): void;
+  onSettingsChange(listener: (settings: Settings) => void): void;
+  /** Switches the page between the IDE and the lessons. */
+  setMode(mode: Mode): void;
+  /** Adds a file to the explorer and opens it. */
+  openInEditor(fileName: string, code: string): Promise<void>;
+}
+
+export async function bootShell(): Promise<ShellHandle> {
   const root = document.documentElement;
   root.dataset.mode = "code";
 
@@ -82,6 +97,7 @@ export async function bootShell(): Promise<void> {
       el("span", { class: "brand-mark", "aria-hidden": "true" }, [">_"]),
       el("span", { class: "brand-name" }, ["cpe-online"]),
     ]),
+    createModeSwitch("code"),
     pathEl,
     el("div", { class: "title-actions" }, [runButton, debugButton, debugControls, stopButton]),
   ]);
@@ -339,7 +355,8 @@ export async function bootShell(): Promise<void> {
   const systemLight = window.matchMedia("(prefers-color-scheme: light)");
 
   function applySettings(): void {
-    const light = settings.theme === "light" || (settings.theme === "auto" && systemLight.matches);
+    // Learn mode is always on paper, so its editor needs the light syntax colours.
+    const light = root.dataset.mode === "learn" || settings.theme === "light" || (settings.theme === "auto" && systemLight.matches);
     root.dataset.theme = light ? "light" : "dark";
     // The editor's syntax colours are keyed on this class.
     root.classList.toggle("theme-light", light);
@@ -348,16 +365,17 @@ export async function bootShell(): Promise<void> {
     outputEl.classList.toggle("no-wrap", !settings.outputWrap);
   }
 
-  createSettingsView(sideSection("settings"), {
-    settings,
-    onChange: (patch) => {
-      settings = { ...settings, ...patch };
-      applySettings();
-      // Save the whole object, not the patch: two quick changes would
-      // otherwise each merge into the old stored value and one would be lost.
-      void saveSettings(store, settings).catch(console.warn);
-    },
-  });
+  const settingsListeners: ((settings: Settings) => void)[] = [];
+  function updateSettings(patch: Partial<Settings>): void {
+    settings = { ...settings, ...patch };
+    applySettings();
+    settingsView.sync(settings);
+    for (const listener of settingsListeners) listener(settings);
+    // Save the whole object, not the patch: two quick changes would
+    // otherwise each merge into the old stored value and one would be lost.
+    void saveSettings(store, settings).catch(console.warn);
+  }
+  const settingsView = createSettingsView(sideSection("settings"), { settings, onChange: updateSettings });
   systemLight.addEventListener("change", applySettings);
   applySettings();
   showSideView("files");
@@ -469,7 +487,7 @@ export async function bootShell(): Promise<void> {
     const explanation = explainError(raw, file.doc);
     const problem: Problem = { explanation, fileId: file.id, fileName: file.name };
     if (explanation.line !== null && workspace.activeFile?.id === file.id) editor.highlightErrorLine(explanation.line);
-    const card = createErrorCard(explanation, { fileName: file.name, onJump: () => jumpToProblem(problem) });
+    const card = createErrorCard(explanation, { fileName: file.name, onJump: () => jumpToProblem(problem), kid: settings.kidMode });
     consoleIO.appendElement(card);
     // The terminal follows new output to the bottom; a card is read from its top.
     card.scrollIntoView({ block: "start" });
@@ -629,6 +647,8 @@ export async function bootShell(): Promise<void> {
   // ───── Keyboard ─────
 
   window.addEventListener("keydown", (event) => {
+    // These shortcuts belong to the IDE; the lessons have their own buttons.
+    if (root.dataset.mode !== "code") return;
     const command = event.ctrlKey || event.metaKey;
     if (event.key === "F5" && event.shiftKey) {
       event.preventDefault();
@@ -673,4 +693,20 @@ export async function bootShell(): Promise<void> {
   if (import.meta.env.DEV) {
     (window as unknown as { __cpe: unknown }).__cpe = { editor, workspace, store, consoleIO };
   }
+
+  return {
+    store,
+    getSettings: () => settings,
+    updateSettings,
+    onSettingsChange: (listener) => void settingsListeners.push(listener),
+    setMode(mode) {
+      root.dataset.mode = mode;
+      applySettings();
+    },
+    async openInEditor(fileName, code) {
+      const file = await workspace.addFile(fileName, code);
+      workspace.open(file.id);
+      revealEditor();
+    },
+  };
 }

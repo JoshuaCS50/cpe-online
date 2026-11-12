@@ -26,7 +26,12 @@ const SHORTCUTS: [string, string][] = [
   ["Ctrl+J", "Show or hide the terminal"],
 ];
 
-export function createSettingsView(host: HTMLElement, options: SettingsViewOptions): void {
+export interface SettingsView {
+  /** Shows a setting that was changed somewhere else, for example kid mode from the Learn screen. */
+  sync(settings: Settings): void;
+}
+
+export function createSettingsView(host: HTMLElement, options: SettingsViewOptions): SettingsView {
   const { settings, onChange } = options;
 
   // Theme: one choice out of three.
@@ -68,6 +73,8 @@ export function createSettingsView(host: HTMLElement, options: SettingsViewOptio
     return el("div", { class: "field field-row" }, [el("label", { class: "field-label", for: id }, [label]), box]);
   };
 
+  const kidToggle = toggle("setting-kid-mode", "Simple words (for young learners)", settings.kidMode, (kidMode) => onChange({ kidMode }));
+
   const shortcuts = el("dl", { class: "shortcuts" });
   for (const [keys, action] of SHORTCUTS) {
     shortcuts.append(el("dt", {}, [el("kbd", {}, [keys])]), el("dd", {}, [action]));
@@ -87,7 +94,15 @@ export function createSettingsView(host: HTMLElement, options: SettingsViewOptio
     toggle("setting-output-wrap", "Wrap long lines in the terminal", settings.outputWrap, (outputWrap) =>
       onChange({ outputWrap }),
     ),
+    kidToggle,
     el("h3", { class: "side-group" }, ["Keyboard shortcuts"]),
     shortcuts,
   );
+
+  return {
+    sync(next) {
+      const box = kidToggle.querySelector<HTMLInputElement>("input");
+      if (box) box.checked = next.kidMode;
+    },
+  };
 }

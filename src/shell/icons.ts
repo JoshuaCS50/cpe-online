@@ -1,6 +1,13 @@
 // Icons: Tabler outline set, inlined as SVG so they follow the text colour and
 // work offline. One family for the whole app.
 
+import arrowLeft from "@tabler/icons/outline/arrow-left.svg?raw";
+import check from "@tabler/icons/outline/check.svg?raw";
+import chevronRight from "@tabler/icons/outline/chevron-right.svg?raw";
+import externalLink from "@tabler/icons/outline/external-link.svg?raw";
+import moodKid from "@tabler/icons/outline/mood-kid.svg?raw";
+import refresh from "@tabler/icons/outline/refresh.svg?raw";
+import school from "@tabler/icons/outline/school.svg?raw";
 import alertTriangle from "@tabler/icons/outline/alert-triangle.svg?raw";
 import stepOver from "@tabler/icons/outline/arrow-bounce.svg?raw";
 import book from "@tabler/icons/outline/book-2.svg?raw";
@@ -32,16 +39,23 @@ import x from "@tabler/icons/outline/x.svg?raw";
 
 const ICONS = {
   alertTriangle,
+  arrowLeft,
   book,
   bug,
   bulb,
+  check,
+  chevronRight,
   code,
   copy,
   database,
   databaseOff,
   download,
   eraser,
+  externalLink,
   fileZip,
+  moodKid,
+  refresh,
+  school,
   settings,
   upload,
   fileCode,

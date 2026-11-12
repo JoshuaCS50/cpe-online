@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 
+import { contentPlugin } from "./src/content/vite-plugin-content";
+
 // Cross-origin isolation headers. Production gets the same pair from
 // public/_headers (Cloudflare Pages). Serving them in dev and preview too
 // means anything they would block shows up locally, not after deploy.
@@ -55,7 +57,7 @@ export default defineConfig({
   // Relative base keeps the build portable: domain root (Cloudflare Pages)
   // or any subpath. Override with VITE_BASE when an absolute base is needed.
   base: process.env.VITE_BASE ?? "./",
-  plugins: [swManifest()],
+  plugins: [contentPlugin(), swManifest()],
   server: { headers: isolationHeaders },
   preview: { headers: isolationHeaders },
   build: {

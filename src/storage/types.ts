@@ -38,6 +38,8 @@ export interface Settings {
   outputWrap: boolean;
   seenOnboarding: boolean;
   dismissedInstallBanner: boolean;
+  /** Explanations use the hand-written text for young readers. Applies to lessons and error cards. */
+  kidMode: boolean;
 }
 
 /** Everything a store holds, for atomic imports. */

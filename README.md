@@ -9,6 +9,7 @@ A browser IDE for learning to program. Write, run and debug **C, C++, Python** a
 - **Terminal like a desktop IDE.** When a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
 - **Step debugger** for C, C++ and Python: breakpoints, step over, into and out, the call stack, and each call's variables with changes highlighted.
 - **Errors explained.** A failed program shows a card saying what went wrong, where, why, and how to fix it, with the original message one click away. A Problems tab lists them.
+- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Four lessons so far.
 - **Files stay on the device** (IndexedDB), and can be saved to or opened from the device, or exported as one zip.
 - **Examples and a reference sheet** for the CPE150S course.
 - **Dark, light or match-device theme**, adjustable code size.
@@ -38,6 +39,10 @@ Other commands:
 
 Node 24 is expected (see `.nvmrc`).
 
+## Writing lessons
+
+See [docs/LESSONS.md](docs/LESSONS.md). A lesson is one Markdown file; the build and the tests reject one whose own answer does not pass its checks.
+
 ## Deploying
 
 See [docs/DEPLOY.md](docs/DEPLOY.md). In short: Cloudflare Pages, build command `npm run build`, output directory `dist`.
@@ -66,12 +71,13 @@ See [docs/DEPLOY.md](docs/DEPLOY.md). In short: Cloudflare Pages, build command 
 │   ├── debugger/               # stepping engines for C and Python, debug pane
 │   ├── diagnostics/            # error parsers, catalog and error card
 │   ├── storage/                # device store, settings, zip, migration of old drafts
-│   ├── content/                # examples and the reference sheet
+│   ├── learn/                  # Learn mode: lesson list, lesson view, answer checker, progress
+│   ├── content/                # lessons (tracks/), their compiler, examples, the reference sheet
 │   ├── theme/                  # design tokens
 │   └── pwa/                    # service-worker registration
 ├── tests/unit/                 # Vitest tests
 ├── spikes/                     # small experiments kept as evidence
-└── docs/                       # deploy guide, decision records, work-package briefs
+└── docs/                       # deploy guide, lesson format (LESSONS.md), decision records, briefs
 ```
 
 ## How offline works
