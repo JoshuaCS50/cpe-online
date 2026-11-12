@@ -4,6 +4,10 @@
 .learn {
   --font-prose: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --card-shadow: 3px 3px 0 var(--line-strong);
+  /* The code font joins != <= >= == into one symbol (≠ ≤ ≥). A beginner
+     copying from a lesson must see the characters to type, so no ligatures. */
+  font-variant-ligatures: none;
+  font-feature-settings: "calt" 0, "liga" 0;
   display: grid;
   height: 100dvh;
   grid-template-rows: var(--bar-h) minmax(0, 1fr);
@@ -557,6 +561,13 @@
 
 .try-editor .cm-editor {
   height: 100%;
+}
+
+/* The editor sets its own font, so repeat the rule for its text. */
+.try-editor .cm-content,
+.try-editor .cm-line {
+  font-variant-ligatures: none;
+  font-feature-settings: "calt" 0, "liga" 0;
 }
 
 .runbox-actions {
