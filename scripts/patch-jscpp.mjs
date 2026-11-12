@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Builds public/vendor/JSCPP.es5.min.js from the untouched upstream bundle in
-// vendor-src/, with two behaviour changes: input is pulled on demand, and
-// printf prints the result of a comparison as 1 or 0.
+// vendor-src/, with three behaviour changes: input is pulled on demand,
+// comparisons give 1 or 0, and a function prototype followed by its
+// definition counts as one function.
 //
 // Upstream reads all of stdin once, when <stdio.h> or <iostream> is loaded, so
 // a program can never ask for more input while it runs. The patched build
@@ -73,6 +74,16 @@ const PATCHES = [
   // Comparisons and && || ! produce JavaScript booleans inside the
   // interpreter. In C they are the int values 1 and 0, so printf("%d", a < b)
   // must print 1, not stop with "format argument 'true' not an integer".
+  // A prototype (`int square(int x);`) and the later definition are both
+  // registered. A call whose argument types need converting, such as
+  // square(7) where 7 is unsigned, finds both, and they are the same
+  // function; count it once instead of calling the call ambiguous.
+  [
+    "function calls: a prototype and its definition are one function, not two",
+    1,
+    `e.length>1?this.raiseException("ambiguous method invoking, "+e.length+" compatible methods"):g=e[0]`,
+    `(e=e.filter(function(a,b,c){return c.indexOf(a)===b}),e.length>1?this.raiseException("ambiguous method invoking, "+e.length+" compatible methods"):g=e[0])`,
+  ],
   [
     "cast to int, char, float...: a comparison result becomes 1 or 0, so `int t = a < b; if (t == 1)` works",
     1,
@@ -104,6 +115,6 @@ for (const [description, expected, search, replacement] of PATCHES) {
 }
 
 const banner =
-  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; printf prints comparisons as 1 or 0. */\n";
+  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work. */\n";
 writeFileSync(TARGET, banner + text);
 console.log(`Wrote ${TARGET} (${PATCHES.length} patches applied).`);
