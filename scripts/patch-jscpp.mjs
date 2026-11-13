@@ -186,6 +186,84 @@ const PATCHES = [
     `case 51:a.state=1===c.Initializers.length&&this.rt.isIntegerType(e)?15:47;break;`,
     `case 51:a.state=1===c.Initializers.length&&this.rt.isIntegerType(e)&&"Initializer_expr"===c.Initializers[0].type&&/"type":"(?:Decimal|Octal)Constant","value":"0"/.test(JSON.stringify(c.Initializers[0]))&&!/"value":"[1-9]/.test(JSON.stringify(c.Initializers[0]))?15:47;break;`,
   ],
+  // Pointers. The pointer operators returned bare JavaScript values (true, a
+  // number) where the interpreter expects its own value objects, so every
+  // comparison and pointer subtraction crashed. != and +=/-= looked up the
+  // wrong keys. ++ and -- changed the position object in place, and that
+  // object is shared after `int *p = v;` or `q = p;`, so p++ also moved the
+  // array v. Comparing with NULL (which is 0 here) and `if (p)` failed.
+  [
+    "pointer ==: return a value; a pointer equals 0 (NULL) when it points nowhere",
+    1,
+    `"o(==)":{"#default":function(a,b,c){return!!a.isTypeEqualTo(b.t,c.t)&&("array"===b.t.ptrType?b.v.target===c.v.target&&(null===b.v.target||b.v.position===c.v.position):b.v.target===c.v.target)}}`,
+    `"o(==)":{"#default":function(a,b,c){return a.val(a.boolTypeLiteral,a.isNumericType(c.t)?0==c.v&&null==b.v.target:null==b.v.target||null==c.v.target?null==b.v.target&&null==c.v.target:!!a.isTypeEqualTo(b.t,c.t)&&("array"===b.t.ptrType?b.v.target===c.v.target&&b.v.position===c.v.position:b.v.target===c.v.target))}}`,
+  ],
+  // NULL is a void pointer. Casting it, or any void pointer, to int * (as in
+  // int *p = NULL;) is allowed in C; upstream refused, and its error message
+  // read a field plain pointers do not have, so it crashed instead.
+  [
+    "pointer casts: void * converts to and from any plain pointer",
+    1,
+    `else if(this.isNormalPointerType(a)){if(this.isTypeEqualTo(a.targetType,b.t.targetType))return b;this.raiseException(this.makeTypeString(a.targetType)+" is not equal to "+this.makeTypeString(b.t.eleType))}`,
+    `else if(this.isNormalPointerType(a)){if(this.isTypeEqualTo(a.targetType,b.t.targetType))return b;if("primitive"===a.targetType.type&&"void"===a.targetType.name||b.t.targetType&&"primitive"===b.t.targetType.type&&"void"===b.t.targetType.name)return this.val(a,b.v);this.raiseException(this.makeTypeString(a.targetType)+" is not equal to "+this.makeTypeString(b.t.targetType||b.t))}`,
+  ],
+  [
+    "pointer !: !p is true when p points nowhere",
+    1,
+    `this.types.pointer={"o(==)":`,
+    `this.types.pointer={"o(!)":{"#default":function(a,b){return a.val(a.boolTypeLiteral,null==b.v.target)}},"o(==)":`,
+  ],
+  [
+    "pointer !=: use the o(==) operator and return a value",
+    1,
+    `"o(!=)":{"#default":function(a,b,c){return!a.types.pointer["=="]["#default"](a,b,c)}}`,
+    `"o(!=)":{"#default":function(a,b,c){return a.val(a.boolTypeLiteral,!a.types.pointer["o(==)"]["#default"](a,b,c).v)}}`,
+  ],
+  ["pointer <: return a value", 1, `return b.v.position<c.v.position;`, `return a.val(a.boolTypeLiteral,b.v.position<c.v.position);`],
+  ["pointer >: return a value", 1, `return b.v.position>c.v.position;`, `return a.val(a.boolTypeLiteral,b.v.position>c.v.position);`],
+  ["pointer <=: return a value", 1, `return b.v.position<=c.v.position;`, `return a.val(a.boolTypeLiteral,b.v.position<=c.v.position);`],
+  ["pointer >=: return a value", 1, `return b.v.position>=c.v.position;`, `return a.val(a.boolTypeLiteral,b.v.position>=c.v.position);`],
+  [
+    "pointer - pointer: return the distance as an int value",
+    1,
+    `if(b.v.target===c.v.target)return b.v.position-c.v.position;`,
+    `if(b.v.target===c.v.target)return a.val(a.intTypeLiteral,b.v.position-c.v.position);`,
+  ],
+  ["pointer += and -=: use the o(=) operator", 2, `a.types.pointer["="]["#default"](a,b,c)`, `a.types.pointer["o(=)"]["#default"](a,b,c)`],
+  [
+    "pointer ++: give the pointer a new position instead of moving one it shares",
+    1,
+    `"o(++)":{"#default":function(a,b,c){return b.left||a.raiseException(a.makeValString(b)+" is not a left value"),c?a.val(b.t,a.makeArrayPointerValue(b.v.target,b.v.position++)):(b.v.position++,b)}}`,
+    `"o(++)":{"#default":function(a,b,c){var d;return b.left||a.raiseException(a.makeValString(b)+" is not a left value"),d=b.v,b.v=a.makeArrayPointerValue(d.target,d.position+1),c?a.val(b.t,a.makeArrayPointerValue(d.target,d.position)):b}}`,
+  ],
+  [
+    "pointer --: give the pointer a new position instead of moving one it shares",
+    1,
+    `"o(--)":{"#default":function(a,b,c){return b.left||a.raiseException(a.makeValString(b)+" is not a left value"),c?a.val(b.t,a.makeArrayPointerValue(b.v.target,b.v.position--)):(b.v.position--,b)}}`,
+    `"o(--)":{"#default":function(a,b,c){var d;return b.left||a.raiseException(a.makeValString(b)+" is not a left value"),d=b.v,b.v=a.makeArrayPointerValue(d.target,d.position-1),c?a.val(b.t,a.makeArrayPointerValue(d.target,d.position)):b}}`,
+  ],
+  [
+    "*p on a NULL or never-set pointer: a clear error instead of an interpreter crash",
+    1,
+    `"o(*)":{"#default":function(a,b,c){return void 0===c?b.v.target:void a.raiseException("you cannot multiply a pointer")}}`,
+    `"o(*)":{"#default":function(a,b,c){return void 0===c?(null==b.v.target&&a.raiseException("null pointer: this pointer is NULL or was never given an address, so there is nothing to read or change through it"),b.v.target):void a.raiseException("you cannot multiply a pointer")}}`,
+  ],
+  [
+    "if (p): a pointer counts as true when it points somewhere; int *p = 0; makes a pointer that points nowhere",
+    1,
+    `prototype.cast=function(a,b){var c,d,e,f;if(this.isTypeEqualTo(b.t,a))return b;`,
+    `prototype.cast=function(a,b){var c,d,e,f;if(this.isTypeEqualTo(b.t,a))return b;if("primitive"===a.type&&"bool"===a.name&&this.isPointerType(b.t))return this.val(a,null!=b.v.target);if(this.isNormalPointerType(a)&&"primitive"===b.t.type&&this.isNumericType(b.t)&&0==b.v)return this.val(a,this.nullPointerValue);`,
+  ],
+  // %p mapped to a void pointer, and casting a pointer to it crashed. It now
+  // prints a made-up but consistent address: the same variable always shows
+  // the same number, and neighbouring array elements differ by their size.
+  [
+    "printf %p: print a consistent address",
+    1,
+    `k=e[d++],a=j.cast(l,k),j.isStringType(a.t)?h.push(m=j.getStringFromCharArray(a)):h.push(m=a.v)`,
+    `k=e[d++],"p"===b[1]?h.push(m=function(r,v){var t=v&&v.v&&v.v.target,base,size;if(null==t||"object"!=typeof t)return"(nil)";r.__addr||(r.__addr=new WeakMap,r.__nextAddr=4096);base=r.__addr.get(t);void 0===base&&(base=r.__nextAddr,r.__addr.set(t,base),r.__nextAddr+=1024);size="array"===v.t.ptrType&&v.t.eleType&&"char"===v.t.eleType.name?1:"array"===v.t.ptrType&&v.t.eleType&&"double"===v.t.eleType.name?8:4;return"0x"+(1879048192+base+("array"===v.t.ptrType?size*v.v.position:0)).toString(16)}(j,k)):(a=j.cast(l,k),j.isStringType(a.t)?h.push(m=j.getStringFromCharArray(a)):h.push(m=a.v))`,
+  ],
+  ["printf %p: format the address as text", 1, `e=g.apply(null,[a].concat(i.call(d)))`, `e=g.apply(null,[a.replace(/%p/g,"%s")].concat(i.call(d)))`],
   // A prototype (`int square(int x);`) and the later definition are both
   // registered. A call whose argument types need converting, such as
   // square(7) where 7 is unsigned, finds both, and they are the same

@@ -9,7 +9,7 @@ A browser IDE for learning to program. Write, run and debug **C, C++, Python** a
 - **Terminal like a desktop IDE.** When a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
 - **Step debugger** for C, C++ and Python: breakpoints, step over, into and out, the call stack, and each call's variables with changes highlighted.
 - **Errors explained.** A failed program shows a card saying what went wrong, where, why, and how to fix it, with the original message one click away. A Problems tab lists them.
-- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Thirty-six lessons so far.
+- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Thirty-nine lessons so far.
 - **Files stay on the device** (IndexedDB), and can be saved to or opened from the device, or exported as one zip.
 - **Examples and a reference sheet** for the CPE150S course.
 - **Dark, light or match-device theme**, adjustable code size.
