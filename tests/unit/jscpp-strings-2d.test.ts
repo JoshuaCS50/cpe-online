@@ -138,3 +138,22 @@ describe("array starting values", () => {
     expect(run(`    for (int i = 1; i <= 2; i++) {\n        int a[2] = {i};\n        printf("%d %d ", a[0], a[1]);\n        a[1] = 7;\n    }\n    printf("\\n");`)).toBe("1 0 2 0 \n");
   });
 });
+
+describe("#define and text", () => {
+  it("never replaces a macro name inside a string or a character", () => {
+    const code = String.raw`#include <stdio.h>
+#define DEBUG 1
+#define MAX 5
+#define A 65
+int main() {
+    if (DEBUG) {
+        printf("DEBUG max=%d MAX\n", MAX);
+    }
+    printf("say \"MAX\" or 'MAX' %d\n", MAX);
+    char c = 'A';
+    printf("%c %d %s\n", c, A, "A is MAX");
+    return 0;
+}`;
+    expect(runCInteractive(escapeSpacesInStringLiterals(code), []).stdout).toBe("DEBUG max=5 MAX\nsay \"MAX\" or 'MAX' 5\nA 65 A is MAX\n");
+  });
+});

@@ -352,6 +352,19 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
     const checkButton = button({ label: "Check my answer", icon: "check", showLabel: true, class: "btn btn-check", onClick: () => void check() });
     const hintButton = button({ label: "Hint", icon: "bulb", showLabel: true, class: "btn btn-outline", onClick: () => showHint() });
     const resetButton = button({ label: "Start over", icon: "refresh", showLabel: true, class: "btn btn-quiet", onClick: () => reset() });
+    // The debugger lives in Code mode; this takes the learner's current code there.
+    const editorButton = button({
+      label: "Open in the editor",
+      icon: "externalLink",
+      showLabel: true,
+      class: "btn btn-quiet",
+      onClick: () => {
+        void options.openInEditor(starter.fileName, editor.getDoc(), fileMap(item.files)).then(() => {
+          window.location.hash = "#/code";
+        });
+      },
+    });
+    editorButton.title = "Copy this code into the editor, where you can use the debugger";
     if (hints.length === 0) hintButton.hidden = true;
 
     const runBox = createRunBox({
@@ -364,7 +377,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
         if (line === null) editor.clearErrorLine();
         else editor.highlightErrorLine(line);
       },
-      actions: [checkButton, hintButton, resetButton],
+      actions: [checkButton, hintButton, resetButton, editorButton],
     });
 
     function showHint(): void {

@@ -52,7 +52,7 @@ The same task in simple words.
 ```
 ```
 
-A code block without `{role=...}` stays in the text where it is written.
+A code block without `{role=...}` stays in the text where it is written. Lessons cannot show images (raw HTML is shown as text), so diagrams such as flowcharts are drawn with keyboard characters inside a plain code block, as in `core/a1/flowcharts.md`. In a Markdown table, a `|` inside a cell ends the cell, even inside backticks; write `\|` or reword.
 
 A C or Python lesson can give its programs data files to open with `fopen` or `open` (a `.py` data file can also be imported as a module). Each one is a block with `role=file` and a name made of letters, digits, dots, dashes and underscores:
 
@@ -81,9 +81,11 @@ Hints are plain text, except that text between backticks is shown as code: `` 'T
 | `code-contains` | the code (comments removed) matches `pattern` | `pattern`, `message` |
 | `file-equals` | after the run, the file the program wrote holds `expect` (C, C++ and Python; not MATLAB) | `file`, `expect`, `stdin` (optional) |
 
-Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`.
+Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`. A check fails when the program stops with an error or runs too long; the exit code does not matter, so a program may print a message and `return 1` on bad input. `stdin: []` tests what happens when the input ends at once.
 
 Use `io-cases` with several inputs when the answer must be computed, so that typing the expected text into `printf` does not pass.
+
+`code-contains` can also require that something is absent, with a lookahead at the start: `'^(?![\s\S]*\b3000\b[\s\S]*\b3000\b)'` passes only when 3000 appears at most once in the code (comments are removed first). The pattern is tested against the whole program without the multiline flag, so write `(^|\n)` to mean the start of any line.
 
 ## Kid text rules
 
@@ -110,6 +112,7 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 - Pointers were badly broken upstream: every comparison (`==`, `<`, `== NULL`), pointer subtraction, `p += n`, `!p`, `if (p)`, `int *p = NULL;`, `int *p = 0;` and `%p` crashed, and `p++` also moved the array `p` was copied from. Patches fix them, guarded by `tests/unit/jscpp-pointers.test.ts`. Following a NULL or never-set pointer now stops with a "null pointer" error that the catalog explains (`c.null-pointer`). `%p` prints a made-up but consistent address.
 - `malloc`, `calloc`, `realloc` and `free` did not exist upstream; patches add them (guarded by `tests/unit/jscpp-heap.test.ts`). A block from `malloc` takes the type it is first assigned to. Writing past its end, using it after `free`, freeing it twice, and freeing an ordinary array or a moved pointer all stop with an error that the catalog explains (`c.index-out-of-range`, `c.use-after-free`, `c.double-free`, `c.bad-free`). Unlike real C, new memory always starts at 0, and returning the address of a local variable is not detected (it usually still prints the right values), so lessons point these out in the text. Leaks are not reported.
 - Casts with a pointer type name, such as `(int *) p`, lost their `*` upstream; a patch fixes it.
+- The preprocessor replaced macro names inside strings upstream: after `#define DEBUG 1`, `printf("DEBUG x")` printed `1 x`. It now leaves the inside of `"..."` and `'...'` alone, as real C does (guarded in `tests/unit/jscpp-strings-2d.test.ts`).
 - Structs did not work at all upstream: every `struct` type was "not defined". Patches add them, guarded by `tests/unit/jscpp-structs.test.ts`: members, `{ }` starting values, copying with `=` (arrays inside are copied too), `typedef` with or without a struct name, structs passed to and returned from functions, `->`, arrays of structs (with `{{...}, {...}}` lists), structs inside structs, `sizeof` with typical padding, and linked lists built with `malloc`. `.` on a pointer, a member name the struct lacks, a struct that was never defined, a missing `;` after the definition, too many starting values and `==` on whole structs each have an error card. Not supported: designated starting values (`{.x = 1}`), compound literals (`(struct Point){1, 2}`), unions, bit fields and function pointers as members. Integer `sizeof` results assume 4-byte pointers.
 - `NULL` now comes with `<stdio.h>` as well as `<stdlib.h>`, as in real C.
 - Three upstream bugs in array starting values are fixed: `int a[2] = {x, x};` made the elements and `x` one shared value, a function's `int a[3] = {n};` kept the values of its first call, and `scanf("%s", ...)` left a gap after the word (and ignored `buf + 2`).
@@ -117,7 +120,7 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 - Arrays of pointers (`int *p[3]`, `char *names[] = {...}`, `struct Entry *table[5] = {NULL}`) lost their `*` upstream, so every element was a plain value; a patch fixes it.
 - `scanf("%s", ...)` used a garbled pattern upstream that dropped symbols and kept the newline (`([]{})` came back as `[]{})`); it now reads every character up to the next space, as in real C. A backslash in typed input is still removed.
 - Files did not exist upstream. Patches add `FILE`, `fopen` (modes `r`, `w`, `a`, with `+` and `b` accepted), `fclose`, `fprintf`, `fputs`, `fputc`, `fgetc`, `getc`, `fgets`, `fscanf`, `feof`, `rewind`, `fflush`, `stdin`, `stdout`, `stderr` and `EOF`, guarded by `tests/unit/jscpp-files.test.ts`. Files live in memory: in Code mode they are the explorer's files, and what a program writes is saved back there; in lessons they are the `{role=file}` blocks. `fgets(line, sizeof(line), stdin)` reads a typed line, spaces included. A NULL file, the wrong mode, use after `fclose` and an unknown mode each have an error card. `gets` exists but is unsafe and removed from modern C; lessons use `fgets`.
-- `scanf`, `sscanf` and `fscanf` returned the number of `%` codes upstream, not how many values were read, and crashed when a value did not match. They now stop at the first value that does not match and return how many were stored, or `EOF` when the input ran out first, so `while (scanf("%d", &x) == 1)` works. `%d` reads decimal digits only (upstream also took letters and read `010` as octal). `getchar()` returns `EOF` at the end of input (upstream: 0).
+- `scanf`, `sscanf` and `fscanf` returned the number of `%` codes upstream, not how many values were read, and crashed when a value did not match. They now stop at the first value that does not match and return how many were stored, or `EOF` when the input ran out first, so `while (scanf("%d", &x) == 1)` works. `%d` reads decimal digits only (upstream also took letters and read `010` as octal). `getchar()` returns `EOF` at the end of input (upstream: 0). A number must start where the input is, after spaces and line breaks: upstream looked for digits anywhere further on, so `abc` then `40` read 40 instead of failing.
 - `strtok` is added. `strchr`, `strrchr` and `strstr` returned unusable pointers upstream, and `strstr` never matched; fixed. `printf("%s", s + 2)` printed from the start of `s` upstream; it now starts where the pointer points.
 - `printf` rounds an exact tie (`22.25` to one decimal) up, as JavaScript does, where C rounds to even (`22.2`). Avoid such values in expected output.
 - There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.

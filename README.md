@@ -10,7 +10,7 @@ A browser IDE for learning to program. Write, run and debug **C, C++, Python** a
 - **Files.** C and Python programs can open the files in the explorer (`fopen`, `open`), and what they write appears there as a file you can open. Python can also `import` the other `.py` files. Data files (`.txt`, `.csv`, `.dat` and similar) are edited like code but not run.
 - **Step debugger** for C, C++ and Python: breakpoints, step over, into and out, the call stack, and each call's variables with changes highlighted.
 - **Errors explained.** A failed program shows a card saying what went wrong, where, why, and how to fix it, with the original message one click away. A Problems tab lists them.
-- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Fifty-eight lessons so far.
+- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Seventy-eight lessons so far.
 - **Files stay on the device** (IndexedDB), and can be saved to or opened from the device, or exported as one zip.
 - **Examples and a reference sheet** for the CPE150S course.
 - **Dark, light or match-device theme**, adjustable code size.

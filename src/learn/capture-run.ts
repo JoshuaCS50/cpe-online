@@ -73,7 +73,9 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
       });
       return {
         stdout: consoleIO.stdout(),
-        ok: result.ok && !timedOut,
+        // A program may end with return 1 on purpose after reporting bad
+        // input; only a real error, a time-out or a stop counts as failing.
+        ok: error === undefined && !timedOut && !result.stopped,
         files: filesAfter ?? { ...files },
         ...(error ? { error } : {}),
         ...(timedOut ? { timedOut } : {}),

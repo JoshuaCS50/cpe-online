@@ -238,6 +238,21 @@ int main() {
 }`, ["abc"]).stdout).toBe("0 7 abc\n");
   });
 
+  it("does not skip over text to find a number further on", () => {
+    expect(run(HEAD + String.raw`
+int main() {
+    int x = -1;
+    char junk[20];
+    int n = scanf("%d", &x);
+    if (n == 0) {
+        scanf("%s", junk);
+    }
+    int m = scanf("%d", &x);
+    printf("%d %s %d %d\n", n, junk, m, x);
+    return 0;
+}`, ["abc", "40"]).stdout).toBe("0 abc 1 40\n");
+  });
+
   it("counts partial matches in sscanf", () => {
     expect(run(HEAD + String.raw`
 int main() {

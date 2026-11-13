@@ -636,6 +636,37 @@ const PATCHES = [
     `r=function(a,b){var c;return c=q(a,b,"[-]?[A-Za-z0-9]+"),c?"0"===c[0]?"x"===c[1]||"X"===c[1]?y(c):A(c):parseInt(c):null}`,
     `r=function(a,b){var c;return c=q(a,b,"[-+]?[0-9]+"),c?parseInt(c,10):null}`,
   ],
+  // scanf looked for a match anywhere in the waiting input, so with "abc"
+  // and then "40" typed, %d skipped the letters and read 40. Real scanf
+  // skips spaces and line breaks, then must match right there.
+  [
+    "scanf: a value must start where the input is (after spaces), not anywhere further on",
+    1,
+    `:h=E(a)+h,(g=j.match(new RegExp(h)))`,
+    String.raw`:h=("."===c?"":"^\\s*")+E(a)+h,(g=j.match(new RegExp(h)))`,
+  ],
+  // The preprocessor split each line into names and other characters and
+  // replaced every name that was a macro, even inside text, so after
+  // #define DEBUG 1, printf("DEBUG x") printed "1 x". Real C never changes
+  // the inside of a string or character literal.
+  [
+    "preprocessor: leave names inside \"text\" and 'c' alone when replacing macros",
+    1,
+    `Code:function(a,b,c){var d,e;if(a.doinclude[a.doinclude.length-1])for(d=0;d<b.val.length;)e=a.work(b.val[d]),a.ret+=e,d++}`,
+    `Code:function(a,b,c){var d,e,s={q:0,c:0,x:0};if(a.doinclude[a.doinclude.length-1])for(d=0;d<b.val.length;)e=a.__workRaw(b.val[d],s),a.ret+=e,d++}`,
+  ],
+  [
+    "preprocessor: the same inside the brackets of a call such as printf(...)",
+    1,
+    `if(!this.isMacroFunction(a)){for(d=a.Args,j=[],e=0;e<d.length;){for(k="",f=0;f<d[e].length;)k+=this.work(d[e][f]),f++;j.push(k),e++}return a.Identifier.val+"("+j.join(",")+")"+a.space}`,
+    `if(!this.isMacroFunction(a)){for(d=a.Args,j=[],e=0,g={q:0,c:0,x:0};e<d.length;){for(k="",f=0;f<d[e].length;)k+=this.__workRaw(d[e][f],g),f++;j.push(k),e++}return a.Identifier.val+"("+j.join(",")+")"+a.space}`,
+  ],
+  [
+    "preprocessor: a helper that replaces macros only outside text, tracking quotes across tokens",
+    1,
+    `e.prototype.work=function(a){`,
+    String.raw`e.prototype.__workRaw=function(t,s){var r,k,ch;if(r=(s.q||s.c)&&"Identifier"===t.type?t.val+(t.space||""):this.work(t),"Seperator"!==t.type)s.x=0;else for(k=0;k<t.val.length;k++)ch=t.val[k],s.x?s.x=0:"\\"===ch&&(s.q||s.c)?s.x=1:'"'!==ch||s.c?"'"!==ch||s.q||(s.c=!s.c):s.q=!s.q;return r},e.prototype.work=function(a){`,
+  ],
   [
     "string.h: strtok, which splits text at any of the given characters",
     1,

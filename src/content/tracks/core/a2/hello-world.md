@@ -8,6 +8,7 @@ title: Hello, world
 titleKid: Make the computer say hello
 language: c
 concepts: [program, output, main]
+prereqs: [core.c.what-is-a-program]
 est_minutes: 8
 checks:
   - type: stdout-equals
