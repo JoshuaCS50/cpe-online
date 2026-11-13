@@ -92,6 +92,8 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 
 - Write `int main()`, not `int main(void)`.
 - `scanf` into an array element (`&values[i]`), `scanf("%c", ...)`, `scanf("%lf", ...)` and `printf("%lf"/"%ld", ...)` all failed upstream; patches in `scripts/patch-jscpp.mjs` fix them, guarded by `tests/unit/jscpp-scanf-arrays.test.ts` and `tests/unit/jscpp-interactive-input.test.ts`.
+- `<string.h>` and array starting values were broken upstream: `strcmp` crashed on equal strings, `strcat`, `strncat` and `sprintf` crashed, `strncpy` copied nothing, `strcpy` refused exact fits, `int a[3] = {1};` failed, and no 2D starting values worked. Patches fix all of these, guarded by `tests/unit/jscpp-strings-2d.test.ts`. A single value other than 0 for a whole 2D array (`int s[2][2] = {5};`) and a flat list for a 2D array still give an error.
+- There is no `fgets` (and `gets`, which does exist, is unsafe and removed from modern C), so lessons read text with `scanf("%s", ...)`, one word at a time.
 - There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.
 - Recursion is shallow and slow: every C call uses several JavaScript stack frames, so a few hundred levels already take over a second and around a thousand overflow the stack. Keep recursion in lessons to a few dozen levels. Endless recursion stops with "Maximum call stack size exceeded", which the error catalog explains (`c.recursion-too-deep`).
 - It is slow: roughly 15,000 loop repetitions a second. Keep loops in lessons under about 1,000 repetitions. The tests stop a C program after a million interpreter steps and report it as a loop that never ends, so a starter that loops forever fails the build instead of hanging it.

@@ -110,6 +110,82 @@ const PATCHES = [
     `case"%f":f=o(c,b);break;default:`,
     `case"%f":case"%lf":case"%e":case"%le":case"%g":case"%lg":f=o(c,b);break;default:`,
   ],
+  // <string.h>. Library functions take their arguments spread out,
+  // fn(rt, this, x, y), but strcat, strncat and sprintf called strlen,
+  // strcpy and strncpy as fn(rt, this, [x, y]), so all three crashed inside
+  // the interpreter. strcat and strncat also built their "end of the
+  // destination" pointer with a plain pointer type, which strcpy rejects.
+  ["string.h internal calls: strlen(e)", 2, `)(a,null,[e])`, `)(a,null,e)`],
+  ["string.h internal calls: strlen(c)", 4, `)(a,null,[c])`, `)(a,null,c)`],
+  ["string.h internal calls: strlen(f)", 2, `)(a,null,[f])`, `)(a,null,f)`],
+  ["string.h internal calls: strcpy(k, e) from strcat", 1, `)(a,null,[k,e])`, `)(a,null,k,e)`],
+  ["string.h internal calls: strncpy(m, f, g) from strncat", 1, `)(a,null,[m,f,g])`, `)(a,null,m,f,g)`],
+  [
+    "sprintf: strcpy(dest, formatted), and return the text's length",
+    1,
+    `J(f,null,[g,d]),f.val(f.intTypeLiteral,d.length)`,
+    `J(f,null,g,d),f.val(f.intTypeLiteral,d.v.target.length-1)`,
+  ],
+  // strcpy refused a string that fits exactly (a 3-letter word into char[4])
+  // and, when the destination was too small, wrote the "\0" past its end
+  // without complaint. The check is now "is there room for the \0".
+  [
+    "strcpy: room for the terminator",
+    1,
+    `g===e.length-1?a.raiseException("destination array is not big enough"):e[g]=a.val(a.charTypeLiteral,0)`,
+    `g>=e.length?a.raiseException("destination array is not big enough"):e[g]=a.val(a.charTypeLiteral,0)`,
+  ],
+  [
+    "strcat: the end of the destination is an array pointer",
+    1,
+    `k=a.val(d,a.makeArrayPointerValue(c.v.target,c.v.position+i))`,
+    `k=a.val(c.t,a.makeArrayPointerValue(c.v.target,c.v.position+i))`,
+  ],
+  [
+    "strncat: the end of the destination is an array pointer",
+    1,
+    `m=a.val(d,a.makeArrayPointerValue(c.v.target,c.v.position+k))`,
+    `m=a.val(c.t,a.makeArrayPointerValue(c.v.target,c.v.position+k))`,
+  ],
+  // strcmp compared the second string at the first string's position and did
+  // not stop at "\0", so two equal strings ran off the end and crashed.
+  [
+    "strcmp: compare position by position and stop at the end of the strings",
+    1,
+    `for(h=d.v.target,f=d.v.position,e=c.v.target,g=c.v.position;f<h.length&&g<e.length&&h[f].v===e[f].v;)f++,g++;return a.val(a.intTypeLiteral,e[f].v-h[f].v)`,
+    `for(h=d.v.target,f=d.v.position,e=c.v.target,g=c.v.position;f<h.length&&g<e.length&&h[f].v===e[g].v&&0!==e[g].v;)f++,g++;return a.val(a.intTypeLiteral,(g<e.length?e[g].v:0)-(f<h.length?h[f].v:0))`,
+  ],
+  // strncpy and strncmp compared their count, a value object, with 0, so
+  // strncpy copied nothing and strncmp compared nothing.
+  [
+    "strncpy and strncmp: use the count's value",
+    2,
+    `b.regFunc(function(a,b,c,d,e){var f,g,h,i;if(a.isArrayType(c.t)&&a.isArrayType(d.t)){for(i=d.v.target,g=d.v.position,f=c.v.target,h=c.v.position;e>0&&`,
+    `b.regFunc(function(a,b,c,d,e){var f,g,h,i;if("object"==typeof e&&null!==e&&(e=e.v),a.isArrayType(c.t)&&a.isArrayType(d.t)){for(i=d.v.target,g=d.v.position,f=c.v.target,h=c.v.position;e>0&&`,
+  ],
+  // Arrays of arrays. arrayInit handles one dimension per level and recurses
+  // per element, but its entry check only accepted a list of plain values,
+  // so int grid[2][3] = {{1, 2, 3}, {4, 5, 6}}; failed with "dimensions do
+  // not agree, 2 != 2". A nested list at an outer level now goes straight to
+  // the per-element step; a lone literal 0 at an outer level (= {0}) means
+  // every element is 0. Any other single value still reports an error.
+  [
+    "2D arrays: nested initialiser lists, and = {0}",
+    1,
+    `case 83:a.state="Initializer_array"===c.type&&i>=c.Initializers.length&&(0===c.Initializers.length||"Initializer_expr"===c.Initializers[0].type)?54:82;break;`,
+    `case 83:a.state=d<b.length-1&&"Initializer_array"===c.type&&1===c.Initializers.length&&"Initializer_expr"===c.Initializers[0].type&&/"type":"(?:Decimal|Octal)Constant","value":"0"/.test(JSON.stringify(c.Initializers[0]))&&!/"value":"[1-9]/.test(JSON.stringify(c.Initializers[0]))?(c=null,53):d<b.length-1&&"Initializer_array"===c.type&&i>=c.Initializers.length&&c.Initializers.length>0&&"Initializer_array"===c.Initializers[0].type?53:"Initializer_array"===c.type&&i>=c.Initializers.length&&(0===c.Initializers.length||"Initializer_expr"===c.Initializers[0].type)?54:82;break;`,
+  ],
+  // A list with one value took a "fill every element with it" shortcut that
+  // only works for 0, so int a[3] = {1}; failed with "too few initializers"
+  // instead of giving {1, 0, 0}. The shortcut is now kept for a literal 0
+  // (which the parser reads as an octal constant); anything else takes the
+  // normal path, which fills the missing elements with 0.
+  [
+    "arrays: a one-value list such as {1} leaves the rest 0",
+    1,
+    `case 51:a.state=1===c.Initializers.length&&this.rt.isIntegerType(e)?15:47;break;`,
+    `case 51:a.state=1===c.Initializers.length&&this.rt.isIntegerType(e)&&"Initializer_expr"===c.Initializers[0].type&&/"type":"(?:Decimal|Octal)Constant","value":"0"/.test(JSON.stringify(c.Initializers[0]))&&!/"value":"[1-9]/.test(JSON.stringify(c.Initializers[0]))?15:47;break;`,
+  ],
   // A prototype (`int square(int x);`) and the later definition are both
   // registered. A call whose argument types need converting, such as
   // square(7) where 7 is unsigned, finds both, and they are the same
@@ -151,6 +227,6 @@ for (const [description, expected, search, replacement] of PATCHES) {
 }
 
 const banner =
-  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work; scanf fills array elements and reads %lf. */\n";
+  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work; scanf fills array elements and reads %lf and %c; string.h and 2D initialisers fixed. */\n";
 writeFileSync(TARGET, banner + text);
 console.log(`Wrote ${TARGET} (${PATCHES.length} patches applied).`);
