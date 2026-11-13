@@ -278,7 +278,7 @@ const PATCHES = [
     `d.prototype.makeArrayPointerValue=function(a,b){return{target:a,position:b}},`,
     `d.prototype.makeArrayPointerValue=function(a,b){return{target:a,position:b}},` +
       `d.prototype.__heapAlloc=function(n){var t=[];return n=Math.max(0,Math.floor(Number(n)||0)),t.__heapBlock=!0,t.__bytes=n,this.val(this.arrayPointerType(this.voidTypeLiteral,0),this.makeArrayPointerValue(t,0))},` +
-      `d.prototype.__elemSize=function(t){var l="primitive"===t.type&&this.config.limits[t.name];return l&&l.bytes?l.bytes:"primitive"===t.type&&/double/.test(t.name)?8:4},` +
+      `d.prototype.__elemSize=function(t){if("class"===t.type)return this.getSizeByType(t);var l="primitive"===t.type&&this.config.limits[t.name];return l&&l.bytes?l.bytes:"primitive"===t.type&&/double/.test(t.name)?8:4},` +
       `d.prototype.__heapAdopt=function(t,b){var k=b.v.target,s=this.__elemSize(t),n=Math.floor(k.__bytes/s),i;for(i=0;i<n;i++)k.push(this.defaultValue(t,!0));return k.__adoptedAs=t,this.val(this.arrayPointerType(t,n),this.makeArrayPointerValue(k,b.v.position))},` +
       `d.prototype.__heapFree=function(p){var t=p&&p.v&&p.v.target;if(null==t)return;if(!Array.isArray(t)||!t.__heapBlock)return this.raiseException("bad free: free() was given an address that did not come from malloc, calloc or realloc");if(t.__freed)return this.raiseException("double free: this memory was already given back with free()");if(0!==p.v.position)return this.raiseException("bad free: free() must be given the address malloc returned, not one moved along from it");t.__freed=!0},` +
       `d.prototype.__heapRealloc=function(p,n){var t=p&&p.v&&p.v.target,r,k,e,s,c,i;if(null==t)return this.__heapAlloc(n);if(!Array.isArray(t)||!t.__heapBlock)return this.raiseException("bad realloc: realloc() was given an address that did not come from malloc, calloc or realloc");if(t.__freed)return this.raiseException("use after free: this memory was already given back with free(), so it must not be used any more");if(r=this.__heapAlloc(n),!t.__adoptedAs)return t.__freed=!0,r;for(e=t.__adoptedAs,k=r.v.target,s=this.__elemSize(e),c=Math.floor(k.__bytes/s),i=0;i<c;i++)k.push(i<t.length?this.val(e,t[i].v,!0):this.defaultValue(e,!0));return k.__adoptedAs=e,t.__freed=!0,this.val(this.arrayPointerType(e,c),this.makeArrayPointerValue(k,0))},`,
@@ -313,7 +313,7 @@ const PATCHES = [
     "casts: (int *) and other pointer type names keep their *",
     1,
     `TypeName:function(b,c,d){var e,f,g,h,i;for(a=b.rt,i=[],h=c.base,f=0,g=h.length;f<g;f++)e=h[f],"const"!==e&&i.push(e);return a.simpleType(i)}`,
-    `TypeName:function(b,c,d){var e,f,g,h,i;for(a=b.rt,i=[],h=c.base,f=0,g=h.length;f<g;f++)e=h[f],"const"!==e&&i.push(e);return b.buildRecursivePointerType(c.extra&&c.extra.Pointer,a.simpleType(i),0)}`,
+    `TypeName:function(b,c,d){var e,f,g,h,i;for(a=b.rt,i=[],h=c.base,f=0,g=h.length;f<g;f++)e=h[f],"const"!==e&&!(Array.isArray(e)&&!e.length)&&i.push(e);return b.buildRecursivePointerType(c.extra&&c.extra.Pointer,a.simpleType(i),0)}`,
   ],
   [
     "heap: using memory after free() stops with a clear error",
@@ -349,6 +349,177 @@ const PATCHES = [
     `f.prototype.formatDouble=function(a){var b=parseFloat(a.arg);`,
     `f.prototype.formatDouble=function(a){"boolean"==typeof a.arg&&(a.arg=+a.arg);var b=parseFloat(a.arg);`,
   ],
+  // ---- Structs. Upstream parsed a struct definition but threw its member
+  // list away, so every struct type was "not defined". The parser now keeps
+  // each member list by struct name, and the first time a struct type is
+  // named it is built from that list. A struct value is
+  // {members: {name: value}}; copying one copies every member, arrays too.
+  [
+    "structs: forget the struct definitions of the previous program before each parse",
+    1,
+    `if(peg$result=peg$startRuleFunction(),`,
+    `if(globalThis.__cpeStructDefs=Object.create(null),globalThis.__cpeAnon=0,peg$result=peg$startRuleFunction(),`,
+  ],
+  [
+    "structs: the parser keeps each struct's member list (a struct with no name gets a made-up one)",
+    1,
+    `peg$savedPos=c,d=peg$c27(d),c=d`,
+    `peg$savedPos=c,null==d&&(d="(no name "+(globalThis.__cpeAnon=(globalThis.__cpeAnon||0)+1)+")"),(globalThis.__cpeStructDefs||(globalThis.__cpeStructDefs=Object.create(null)))[d]=f,d=peg$c27(d),c=d`,
+  ],
+  [
+    "structs: `struct Point {...};` on its own declares no variable",
+    1,
+    `g=a.simpleType(d.DeclarationSpecifiers),t=d.InitDeclaratorList,`,
+    `g=a.simpleType(d.DeclarationSpecifiers),t=d.InitDeclaratorList||[],`,
+  ],
+  [
+    "structs: a struct type is built the first time it is named",
+    1,
+    `(b={type:"class",name:a},this.getTypeSignature(b)in this.types?b:void this.raiseException(`,
+    `(b={type:"class",name:a},this.getTypeSignature(b)in this.types||this.__defineStruct(a)?b:void this.raiseException(`,
+  ],
+  [
+    "structs: helpers that define a struct type, copy struct values and size them",
+    1,
+    `d.prototype.newClass=function(a,b){`,
+    `d.prototype.__defineStruct=function(a){var m=/^struct (.+)$/.exec(a),D=globalThis.__cpeStructDefs,rt=this,F,T,S,fields,seen=Object.create(null),num;if(!m||!D||!Object.prototype.hasOwnProperty.call(D,m[1]))return!1;` +
+      `F=D[m[1]],T={type:"class",name:a},S=Object.create(null),fields=[],S.__fields=fields,` +
+      `S["o(=)"]={"#default":function(r,b,c){return b.left||r.raiseException(r.makeValString(b)+" is not a left value"),c=r.cast(b.t,c),r.__copyStruct(b,c),b}},` +
+      `S["o(&)"]={"#default":function(r,b,c){return void 0===c?b.array?r.val(r.arrayPointerType(b.t,b.array.length),r.makeArrayPointerValue(b.array,b.arrayIndex)):r.val(r.normalPointerType(b.t),r.makeNormalPointerValue(b)):void r.raiseException("& between two values needs numbers, not a struct")}},` +
+      `this.types[this.getTypeSignature(T)]=S;` +
+      `num=function(x){for(;x&&"ConstantExpression"===x.type;)x=x.Expression;if(x&&"DecimalConstant"===x.type)return parseInt(x.value,10);if(x&&"HexConstant"===x.type)return parseInt(x.value,16);if(x&&"OctalConstant"===x.type)return parseInt(x.value,8);rt.raiseException("an array inside a struct needs a plain number for its size, such as [20]",x)};` +
+      `F.forEach(function(q){var base=rt.simpleType(q[0]),list=[q[1][0]].concat((q[1][1]||[]).map(function(x){return x[1]}));list.forEach(function(dd){var name,dims=[],t;` +
+      `dd&&"DirectDeclarator"===dd.type&&dd.left&&"Identifier"===dd.left.type||rt.raiseException("this kind of member is not supported inside a struct",dd),name=dd.left.Identifier,` +
+      `(dd.right||[]).forEach(function(r){"DirectDeclarator_modifier_array"===r.type?dims.push(num(r.Expression)):rt.raiseException("this kind of member is not supported inside a struct",r)}),` +
+      `name in seen&&rt.raiseException("the struct already has a member named "+name,dd),seen[name]=1,t=rt.interp.buildRecursivePointerType(dd.Pointer,base,0),` +
+      `fields.push({name:name,type:dims.length?rt.interp.arrayType(dims,0,t):t,isArray:dims.length>0,dims:dims,eleType:t})})});return!0},` +
+      `d.prototype.__copyStruct=function(d,s){var S=this.types[this.getTypeSignature(d.t)],i,f,x,y;for(i=0;i<S.__fields.length;i++)f=S.__fields[i],x=d.v.members[f.name],y=s.v.members[f.name],f.isArray?this.__copyArray(x,y,f,0):this.isClassType(f.type)?this.__copyStruct(x,y):(x.t=y.t,x.v=y.v)},` +
+      `d.prototype.__copyArray=function(d,s,f,k){var a=d.v.target,b=s.v.target,i,x,y;for(i=0;i<a.length&&i<b.length;i++)x=a[i],y=b[i],k<f.dims.length-1?this.__copyArray(x,y,f,k+1):this.isClassType(f.eleType)?this.__copyStruct(x,y):(x.t=y.t,x.v=y.v)},` +
+      `d.prototype.__sizeAlign=function(t){var S,i,f,sa,n,k,off=0,al=1;if(!this.isClassType(t))return n=this.isPointerType(t)?this.config.limits.pointer.bytes:this.__elemSize(t),[n,n];` +
+      `S=this.types[this.getTypeSignature(t)],S&&S.__fields||this.raiseException("not implemented");for(i=0;i<S.__fields.length;i++){for(f=S.__fields[i],sa=this.__sizeAlign(f.eleType),n=sa[0],k=0;k<f.dims.length;k++)n*=f.dims[k];off=Math.ceil(off/sa[1])*sa[1]+n,al=Math.max(al,sa[1])}return[Math.ceil(off/al)*al,al]},` +
+      `d.prototype.__sizeofTypedef=function(x){for(;x&&"ParenthesesExpression"===x.type;)x=x.Expression;return x&&"IdentifierExpression"===x.type&&Object.prototype.hasOwnProperty.call(this.typedefs,x.Identifier)?{t:this.typedefs[x.Identifier],v:{}}:null},` +
+      `d.prototype.newClass=function(a,b){`,
+  ],
+  [
+    "structs: sizeof(Node) where Node is a typedef name, which the parser reads as a variable",
+    1,
+    `UnaryExpression_Sizeof_Expr:$traceurRuntime.initGeneratorFunction(function b(c,d,e){var f,g,h,i,j,k,l;return $traceurRuntime.createGeneratorInstance(function(b){for(;;)switch(b.state){case 0:a=c.rt,b.state=22;break;`,
+    `UnaryExpression_Sizeof_Expr:$traceurRuntime.initGeneratorFunction(function b(c,d,e){var f,g,h,i,j,k,l;return $traceurRuntime.createGeneratorInstance(function(b){for(;;)switch(b.state){case 0:a=c.rt,f=a.__sizeofTypedef(d.Expression),b.state=f?18:22;break;`,
+  ],
+  [
+    "structs: -> on a NULL pointer stops with the null pointer error",
+    1,
+    `"o(->)":{"#default":function(a,b,c){return a.getMember(b.v.target,c)}}`,
+    `"o(->)":{"#default":function(a,b,c){return null==b.v.target&&a.raiseException("null pointer: this pointer is NULL or was never given an address, so there is nothing to read or change through it"),a.getMember(b.v.target,c)}}`,
+  ],
+  [
+    "structs: a new struct starts with every member at 0, arrays too",
+    1,
+    `else if("class"===a.type)this.raiseException("no default value for object");`,
+    `else if("class"===a.type){var S=this.types[this.getTypeSignature(a)],M,i;if(S&&S.__fields){for(M={},i=0;i<S.__fields.length;i++)M[S.__fields[i].name]=this.defaultValue(S.__fields[i].type,!0);return this.val(a,{members:M},b)}this.raiseException("no default value for object")}`,
+  ],
+  [
+    "structs: passing, returning or copying a struct copies every member, arrays included",
+    1,
+    `d.prototype.clone=function(a){return this.val(a.t,a.v)}`,
+    `d.prototype.clone=function(a){var n;return a.t&&"class"===a.t.type&&a.v&&a.v.members?(n=this.defaultValue(a.t),this.__copyStruct(n,a),n):this.val(a.t,a.v)}`,
+  ],
+  [
+    "structs: sizeof a struct adds up its members, with the padding a typical compiler adds",
+    1,
+    `this.isPrimitiveType(a)?this.config.limits[a.name].bytes:void this.raiseException("not implemented")},d.prototype.getMember=`,
+    `this.isPrimitiveType(a)?this.config.limits[a.name].bytes:this.__sizeAlign(a)[0]},d.prototype.getMember=`,
+  ],
+  [
+    "structs: a member name the struct does not have gives a clear error",
+    1,
+    `if(b in a.v.members)return a.v.members[b]}else`,
+    `if(b in a.v.members)return a.v.members[b];this.raiseException(this.makeTypeString(c)+" has no member named "+b)}else`,
+  ],
+  [
+    "structs: . on a pointer suggests ->",
+    1,
+    `else this.raiseException("only a class can have members")`,
+    `else this.raiseException(this.isPointerType(c)?"this is a pointer to a struct, so use -> instead of . to reach "+b:"only a struct can have members")`,
+  ],
+  [
+    "structs: a visitor that fills a struct from a { } list, member by member",
+    1,
+    `Initializer_expr:$traceurRuntime.initGeneratorFunction(function b(c,d,e){`,
+    `__CpeStructInit:function(){var G=function*(b,c,d){var r=b.rt,t=c.structType,S=r.types[r.getTypeSignature(t)],v=r.defaultValue(t,!0),it=c.init.Initializers,i,f,g,x,m;` +
+      `for(it.length>S.__fields.length&&r.raiseException("too many values in the { } list for "+r.makeTypeString(t),c.init),i=0;i<it.length;i++)f=S.__fields[i],g=it[i],m=v.v.members[f.name],` +
+      `f.isArray?(x=yield*b.arrayInit(f.dims,g,0,f.eleType,d),r.__copyArray(m,x,f,0)):` +
+      `"Initializer_array"===g.type?r.isClassType(f.type)?(x=yield*G(b,{init:g,structType:f.type},d),r.__copyStruct(m,x)):r.raiseException("the value for "+f.name+" has { } around it, but "+f.name+" is not an array or a struct",g):` +
+      `(x="shorthand"in g?g.shorthand:yield*b.visit(b,g.Expression,d),x=r.cast(f.type,x),r.isClassType(f.type)?r.__copyStruct(m,x):(m.t=x.t,m.v=x.v));return v};` +
+      `return Object.defineProperty(G,"constructor",{value:h.constructor}),G}(),Initializer_expr:$traceurRuntime.initGeneratorFunction(function b(c,d,e){`,
+  ],
+  [
+    "structs: struct P p = {...}; fills p member by member",
+    1,
+    `case 137:b.state=null==l?131:127;break;`,
+    `case 137:null!=l&&"Initializer_array"===l.type&&a.isClassType(x)&&(l={Expression:{type:"__CpeStructInit",init:l,structType:x}}),b.state=null==l?131:127;break;`,
+  ],
+  [
+    "structs: an array of structs may list each struct in its own { }",
+    1,
+    `"Initializer_array"===c.type&&i>=c.Initializers.length&&(0===c.Initializers.length||"Initializer_expr"===c.Initializers[0].type)?54:82`,
+    `"Initializer_array"===c.type&&i>=c.Initializers.length&&(0===c.Initializers.length||"Initializer_expr"===c.Initializers[0].type||d===b.length-1&&this.rt.isClassType(e))?54:82`,
+  ],
+  [
+    "structs: keep each struct's own { } list until its element is filled",
+    1,
+    `case 43:a.state="shorthand"in g?39:35`,
+    `case 43:a.state="shorthand"in g||"Initializer_array"===g.type?39:35`,
+  ],
+  [
+    "structs: a struct's { } list inside an array fills that element",
+    1,
+    `case 157:c&&"Initializer_expr"!==c.type&&`,
+    `case 157:c&&"Initializer_array"===c.type&&this.rt.isClassType(e)&&(c={type:"Initializer_expr",Expression:{type:"__CpeStructInit",init:c,structType:e}}),c&&"Initializer_expr"!==c.type&&`,
+  ],
+  // Two upstream bugs in array starting values. The { } list was rewritten
+  // in place the first time it ran, so a function's int a[3] = {n}; kept the
+  // first call's values on every later call. And each element was the very
+  // value it was given, so int a[2] = {x, x}; made a[0], a[1] and x one box.
+  [
+    "array starting values: work on a copy of the { } list, not the program itself",
+    1,
+    `case 0:h=void 0,j=void 0,m=void 0,l=void 0,a.state=163;break;`,
+    `case 0:h=void 0,j=void 0,m=void 0,l=void 0,c&&"Initializer_array"===c.type&&(c=Object.assign({},c)),a.state=163;break;`,
+  ],
+  [
+    "array starting values: each element gets its own copy of the value",
+    1,
+    `case 150:m=this.rt.cast(e,l),m.left=!0`,
+    `case 150:m=this.rt.clone(this.rt.cast(e,l)),m.left=!0`,
+  ],
+  [
+    "debugger: show a struct's members instead of <object>",
+    1,
+    `else this.isClassType(a.t)&&(c="<object>");return c}`,
+    `else this.isClassType(a.t)&&(c=a.v&&a.v.members?"{"+Object.keys(a.v.members).map(function(k){return k+": "+this.makeValueString(a.v.members[k],b)},this).join(", ")+"}":"<object>");return c}`,
+  ],
+  [
+    "debugger: show a NULL pointer as NULL instead of crashing",
+    1,
+    `b.noPointer?c="->?":(b.noPointer=!0,c="->"+this.makeValueString(a.v.target))`,
+    `null==a.v.target?c="NULL":b.noPointer?c="->?":(b.noPointer=!0,c="->"+this.makeValueString(a.v.target,b))`,
+  ],
+  [
+    "stdio.h: defines NULL, as in real C (upstream only stdlib.h did)",
+    1,
+    `return L=b.normalPointerType(b.charTypeLiteral),N=b.config.stdio,`,
+    `return b.scope[0].NULL=b.nullPointer,L=b.normalPointerType(b.charTypeLiteral),N=b.config.stdio,`,
+  ],
+  // scanf("%s", word) swapped in new character values instead of filling
+  // the array's own, wrote one slot past the terminator (leaving a hole in
+  // the array), and ignored where the pointer pointed (buf + 2).
+  [
+    "scanf %s: fill the array's own characters, from where the pointer points, and nothing past the end of the word",
+    1,
+    `if(i=b.makeCharArrayFromString(c),i.v.target.length>a.v.target.length)return b.raiseException("Not enough memory on pointer");for(h=[],d=e=0,g=i.v.target.length;0<=g?e<=g:e>=g;d=0<=g?++e:--e)try{h.push(a.v.target[d]=i.v.target[d])}catch(a){h.push(b.raiseException("Not enough memory on pointer"))}return h;`,
+    `if(i=b.makeCharArrayFromString(c),i.v.target.length>a.v.target.length-a.v.position)return b.raiseException("Not enough memory on pointer");for(h=[],d=0;d<i.v.target.length;d++)h.push(a.v.target[a.v.position+d].v=i.v.target[d].v);return h;`,
+  ],
 ];
 
 let text = readFileSync(SOURCE, "utf8");
@@ -362,6 +533,6 @@ for (const [description, expected, search, replacement] of PATCHES) {
 }
 
 const banner =
-  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work; scanf fills array elements and reads %lf and %c; string.h and 2D initialisers fixed. */\n";
+  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work; scanf fills array elements and reads %lf and %c; string.h and 2D initialisers fixed; pointers, malloc and structs work. */\n";
 writeFileSync(TARGET, banner + text);
 console.log(`Wrote ${TARGET} (${PATCHES.length} patches applied).`);

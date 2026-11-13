@@ -115,3 +115,18 @@ describe("arrays of arrays", () => {
     expect(rawJscppError(source(`    int s[2][2] = {5};`))).not.toBeNull();
   });
 });
+
+describe("array starting values", () => {
+  it("copies each value, so changing the array leaves the variable alone", () => {
+    expect(run(`    int x = 1;\n    int a[2] = {x, x};\n    a[0] = 5;\n    printf("%d %d %d\\n", x, a[0], a[1]);`)).toBe("1 5 1\n");
+  });
+
+  it("starts fresh on every call of a function", () => {
+    const code = `#include <stdio.h>\n\nvoid f(int n) {\n    int a[3] = {n};\n    int g[2][2] = {{n, n}};\n    printf("%d %d %d %d\\n", a[0], a[1], g[0][1], g[1][0]);\n    a[1] = 99;\n    g[1][0] = 99;\n}\n\nint main() {\n    f(1);\n    f(2);\n    return 0;\n}`;
+    expect(runCInteractive(escapeSpacesInStringLiterals(code), []).stdout).toBe("1 0 1 0\n2 0 2 0\n");
+  });
+
+  it("starts fresh on every pass of a loop", () => {
+    expect(run(`    for (int i = 1; i <= 2; i++) {\n        int a[2] = {i};\n        printf("%d %d ", a[0], a[1]);\n        a[1] = 7;\n    }\n    printf("\\n");`)).toBe("1 0 2 0 \n");
+  });
+});

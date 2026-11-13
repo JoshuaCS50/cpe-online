@@ -55,7 +55,8 @@ export function createCStepper(dbg: JscppDebugger): CStepper {
     try {
       return dbg
         .variable()
-        .filter((variable) => variable.value !== undefined)
+        // NULL is a library constant, not a variable the student made.
+        .filter((variable) => variable.value !== undefined && variable.name !== "NULL")
         .map((variable) => ({ name: variable.name, value: String(variable.value), type: variable.type }));
     } finally {
       dbg.rt.scope = all;

@@ -188,4 +188,27 @@ describe("C stepper", () => {
     stepper.resume("continue", NONE);
     expect(stdout()).toBe("42\n");
   });
+
+  it("shows struct members and NULL pointers", () => {
+    const code = [
+      "#include <stdio.h>",
+      "struct Node {",
+      "    int value;",
+      "    struct Node *next;",
+      "};",
+      "int main() {",
+      "    struct Node b = {2, NULL};",
+      "    struct Node a = {1, &b};",
+      '    printf("%d\\n", a.next->value);',
+      "    return 0;",
+      "}",
+      "",
+    ].join("\n");
+    const { stepper, stdout } = start(code);
+    const state = paused(stepper.start(new Set([9])));
+    expect(values(state)).toEqual({ a: "{value: 1, next: ->{value: 2, next: NULL}}", b: "{value: 2, next: NULL}" });
+    expect(state.globals).toEqual([]);
+    stepper.resume("continue", NONE);
+    expect(stdout()).toBe("2\n");
+  });
 });
