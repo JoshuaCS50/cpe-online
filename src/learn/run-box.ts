@@ -4,7 +4,7 @@
 
 import { explainError } from "../diagnostics/engine";
 import { createErrorCard } from "../diagnostics/error-card";
-import type { LessonLanguage } from "../content/schema";
+import type { DataFile, LessonLanguage } from "../content/schema";
 import { canStop, runProgram } from "../runners/run";
 import { button, el } from "../shell/dom";
 import { createConsole } from "../terminal/console";
@@ -19,6 +19,13 @@ export interface RunBoxOptions {
   onErrorLine?(line: number | null): void;
   /** Extra buttons shown after Run and Stop. */
   actions?: HTMLElement[];
+  /** Data files the program can open with fopen. */
+  files?: readonly DataFile[];
+}
+
+/** Data files as the runner takes them: name -> text. */
+export function fileMap(files: readonly DataFile[] | undefined): Record<string, string> {
+  return Object.fromEntries((files ?? []).map((file) => [file.name, file.text]));
 }
 
 export interface RunBox {
@@ -67,6 +74,15 @@ export function createRunBox(options: RunBoxOptions): RunBox {
         fileName: options.fileName,
         consoleIO,
         signal: abort.signal,
+        files: fileMap(options.files),
+        // Show what the program wrote, since there is no explorer here.
+        onFiles: (after) => {
+          const before = fileMap(options.files);
+          for (const [name, text] of Object.entries(after)) {
+            if (before[name] === text) continue;
+            consoleIO.writeInfo(`\n--- ${name} now holds ---\n${text}${text.endsWith("\n") || text === "" ? "" : "\n"}--- end of ${name} ---\n`);
+          }
+        },
         onError: (raw) => {
           const explanation = explainError(raw, code);
           options.onErrorLine?.(explanation.line);

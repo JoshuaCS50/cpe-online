@@ -28,6 +28,8 @@ export const checkSchema = z.discriminatedUnion("type", [
   }),
   /** The code itself must match, for example "uses a for loop". Comments are ignored. */
   z.strictObject({ type: z.literal("code-contains"), pattern: z.string().min(1), message: z.string().min(1) }),
+  /** After the run, the file the program wrote must hold `expect` (compared like output). C only. */
+  z.strictObject({ type: z.literal("file-equals"), stdin, file: z.string().min(1), expect: z.string() }),
 ]);
 export type Check = z.infer<typeof checkSchema>;
 
@@ -85,6 +87,12 @@ export interface CodeSample {
   code: string;
 }
 
+/** A data file a lesson gives its programs, opened with fopen. */
+export interface DataFile {
+  name: string;
+  text: string;
+}
+
 /** The "Try it yourself" part of a lesson. */
 export interface TryIt {
   promptHtml: string;
@@ -122,6 +130,8 @@ export interface Lesson extends LessonMeta {
   kidHtml: string;
   example?: CodeSample;
   tryIt?: TryIt;
+  /** Files every run of this lesson can open (example, Run and Check). */
+  files: DataFile[];
 }
 
 export function metaOf(lesson: Lesson): LessonMeta {

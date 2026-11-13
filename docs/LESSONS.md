@@ -54,6 +54,17 @@ The same task in simple words.
 
 A code block without `{role=...}` stays in the text where it is written.
 
+A C lesson can give its programs data files to open with `fopen`. Each one is a block with `role=file` and a name made of letters, digits, dots, dashes and underscores:
+
+````markdown
+```text {role=file file=readings.txt}
+21.5
+22.0
+```
+````
+
+The file is shown in the explanation under its name and again above the editor on the Example and Try tabs. Every run of the lesson (example, Run, every check) starts from a fresh copy, and "Open in the editor" adds it to the explorer unless a file of that name is already there. A lesson may have several data files.
+
 Hints are plain text, except that text between backticks is shown as code: `` 'Type this: `n++;`' ``. In kid hints, code in backticks counts as one word, which keeps a long line of code within the 12-word rule.
 
 "Try it yourself" is all or nothing: `::: try`, `::: try-kid`, a starter, a solution and at least one check. `hints` and `hintsKid` must have the same number of entries.
@@ -66,6 +77,7 @@ Hints are plain text, except that text between backticks is shown as code: `` 'T
 | `io-cases` | every case prints its `expect` | `cases: [{stdin: [...], expect: "..."}]` |
 | `stdout-regex` | the output matches `pattern` | `pattern`, `stdin`, `message` (shown on failure) |
 | `code-contains` | the code (comments removed) matches `pattern` | `pattern`, `message` |
+| `file-equals` | after the run, the file the program wrote holds `expect` (C and C++ only) | `file`, `expect`, `stdin` (optional) |
 
 Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`.
 
@@ -102,7 +114,10 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 - The debugger shows a struct as `{x: 1, y: 2}` and a NULL pointer as `NULL`.
 - Arrays of pointers (`int *p[3]`, `char *names[] = {...}`, `struct Entry *table[5] = {NULL}`) lost their `*` upstream, so every element was a plain value; a patch fixes it.
 - `scanf("%s", ...)` used a garbled pattern upstream that dropped symbols and kept the newline (`([]{})` came back as `[]{})`); it now reads every character up to the next space, as in real C. A backslash in typed input is still removed.
-- There is no `fgets` (and `gets`, which does exist, is unsafe and removed from modern C), so lessons read text with `scanf("%s", ...)`, one word at a time.
+- Files did not exist upstream. Patches add `FILE`, `fopen` (modes `r`, `w`, `a`, with `+` and `b` accepted), `fclose`, `fprintf`, `fputs`, `fputc`, `fgetc`, `getc`, `fgets`, `fscanf`, `feof`, `rewind`, `fflush`, `stdin`, `stdout`, `stderr` and `EOF`, guarded by `tests/unit/jscpp-files.test.ts`. Files live in memory: in Code mode they are the explorer's files, and what a program writes is saved back there; in lessons they are the `{role=file}` blocks. `fgets(line, sizeof(line), stdin)` reads a typed line, spaces included. A NULL file, the wrong mode, use after `fclose` and an unknown mode each have an error card. `gets` exists but is unsafe and removed from modern C; lessons use `fgets`.
+- `scanf`, `sscanf` and `fscanf` returned the number of `%` codes upstream, not how many values were read, and crashed when a value did not match. They now stop at the first value that does not match and return how many were stored, or `EOF` when the input ran out first, so `while (scanf("%d", &x) == 1)` works. `%d` reads decimal digits only (upstream also took letters and read `010` as octal). `getchar()` returns `EOF` at the end of input (upstream: 0).
+- `strtok` is added. `strchr`, `strrchr` and `strstr` returned unusable pointers upstream, and `strstr` never matched; fixed. `printf("%s", s + 2)` printed from the start of `s` upstream; it now starts where the pointer points.
+- `printf` rounds an exact tie (`22.25` to one decimal) up, as JavaScript does, where C rounds to even (`22.2`). Avoid such values in expected output.
 - There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.
 - Recursion is shallow and slow: every C call uses several JavaScript stack frames, so a few hundred levels already take over a second and around a thousand overflow the stack. Keep recursion in lessons to a few dozen levels. Endless recursion stops with "Maximum call stack size exceeded", which the error catalog explains (`c.recursion-too-deep`).
 - It is slow: roughly 15,000 loop repetitions a second. Keep loops in lessons under about 1,000 repetitions. The tests stop a C program after a million interpreter steps and report it as a loop that never ends, so a starter that loops forever fails the build instead of hanging it.

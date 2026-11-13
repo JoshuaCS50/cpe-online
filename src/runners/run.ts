@@ -18,6 +18,10 @@ export interface RunOptions {
   consoleIO: ConsoleIO;
   signal?: AbortSignal;
   onError: (error: RawError) => void;
+  /** Files a C program may open with fopen, name -> text. */
+  files?: Record<string, string>;
+  /** Receives every file after a C run that created or changed any. */
+  onFiles?: (files: Record<string, string>) => void;
 }
 
 /** Languages whose programs the Stop button can end. */
@@ -26,11 +30,11 @@ export function canStop(language: string | undefined): boolean {
 }
 
 export function runProgram(options: RunOptions): Promise<DebugResult> {
-  const { language, code, fileName, consoleIO, signal, onError } = options;
+  const { language, code, fileName, consoleIO, signal, onError, files, onFiles } = options;
   switch (language) {
     case "c":
     case "cpp":
-      return runCInWorker({ code, consoleIO, signal, onError: (text) => onError({ language, text }) });
+      return runCInWorker({ code, consoleIO, signal, files, onFiles, onError: (text) => onError({ language, text }) });
     case "python":
       return runPythonInWorker({ code, consoleIO, signal, onError: (text) => onError({ language, text }) });
     case "matlab":
@@ -51,6 +55,9 @@ export function runProgram(options: RunOptions): Promise<DebugResult> {
             },
           }),
       });
+    case "text":
+      consoleIO.writeInfo(`This is a data file, not a program. A C program can read it with fopen("${fileName}", "r").\n`);
+      return Promise.resolve({ ok: false, exitCode: -1 });
     case "java":
       consoleIO.writeInfo(
         "Java cannot run in the browser yet.\n" +

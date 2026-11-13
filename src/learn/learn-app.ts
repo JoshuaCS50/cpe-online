@@ -20,7 +20,7 @@ import type { CheckOutcome } from "./checker";
 import { LESSONS, findLesson, lessonAfter, loadLesson } from "./library";
 import { loadDraft, loadProgress, markDone, saveDraft } from "./progress";
 import type { Progress } from "./progress";
-import { createRunBox } from "./run-box";
+import { createRunBox, fileMap } from "./run-box";
 
 export type LessonTab = "overview" | "example" | "try";
 
@@ -36,7 +36,7 @@ export interface LearnOptions {
   updateSettings(patch: Partial<Settings>): void;
   onSettingsChange(listener: (settings: Settings) => void): void;
   /** Copies code into the IDE as a new file. */
-  openInEditor(fileName: string, code: string): Promise<void>;
+  openInEditor(fileName: string, code: string, dataFiles?: Record<string, string>): Promise<void>;
 }
 
 export interface LearnApp {
@@ -258,6 +258,17 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
     ]);
   }
 
+  /** The lesson's data files, shown where a program can open them. */
+  function dataFiles(item: Lesson): HTMLElement[] {
+    if (item.files.length === 0) return [];
+    return [
+      el("p", { class: "panel-lead" }, [kid ? "The program can open these saved pages:" : "Files the program can open with fopen:"]),
+      ...item.files.map((file) =>
+        el("div", { class: "code-sample data-file" }, [el("span", { class: "code-sample-name" }, [file.name]), el("pre", {}, [el("code", {}, [file.text])])]),
+      ),
+    ];
+  }
+
   function buildExample(item: Lesson, example: CodeSample): HTMLElement {
     const openButton = button({
       label: "Open in the editor",
@@ -265,7 +276,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       showLabel: true,
       class: "btn btn-outline",
       onClick: () => {
-        void options.openInEditor(example.fileName, example.code).then(() => {
+        void options.openInEditor(example.fileName, example.code, fileMap(item.files)).then(() => {
           window.location.hash = "#/code";
         });
       },
@@ -276,6 +287,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       getCode: () => example.code,
       kid: () => kid,
       actions: [openButton],
+      files: item.files,
     });
     cleanup.push(() => runBox.dispose());
     return el("section", { class: "lesson-panel", "data-tab": "example" }, [
@@ -286,6 +298,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
         el("span", { class: "code-sample-name" }, [example.fileName]),
         el("pre", {}, [el("code", {}, [example.code])]),
       ]),
+      ...dataFiles(item),
       runBox.element,
     ]);
   }
@@ -302,7 +315,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       row.append(
         el("div", { class: "check-diff" }, [
           el("div", {}, [el("span", { class: "check-diff-label" }, ["Expected"]), el("pre", {}, [outcome.expected || "(nothing)"])]),
-          el("div", {}, [el("span", { class: "check-diff-label" }, ["Your program printed"]), el("pre", {}, [outcome.actual || "(nothing)"])]),
+          el("div", {}, [el("span", { class: "check-diff-label" }, [outcome.actualLabel ?? "Your program printed"]), el("pre", {}, [outcome.actual || "(nothing)"])]),
         ]),
       );
     }
@@ -346,6 +359,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       fileName: starter.fileName,
       getCode: () => editor.getDoc(),
       kid: () => kid,
+      files: item.files,
       onErrorLine: (line) => {
         if (line === null) editor.clearErrorLine();
         else editor.highlightErrorLine(line);
@@ -392,7 +406,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       results.replaceChildren(el("p", { class: "try-status" }, ["Checking your answer by running it…"]));
       const code = editor.getDoc();
       try {
-        const outcomes = await runChecks(code, starter.language, tryIt.checks, createProgramRunner(starter.language, starter.fileName, checking.signal));
+        const outcomes = await runChecks(code, starter.language, tryIt.checks, createProgramRunner(starter.language, starter.fileName, checking.signal, fileMap(item.files)));
         if (disposed) return;
         const passed = allPassed(outcomes);
         const summary = passed
@@ -442,6 +456,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
 
     return el("section", { class: "lesson-panel", "data-tab": "try" }, [
       prose(kid ? tryIt.promptKidHtml : tryIt.promptHtml, "try-prompt"),
+      ...dataFiles(item),
       el("div", { class: "code-sample-name try-file" }, [starter.fileName]),
       editorHost,
       runBox.element,

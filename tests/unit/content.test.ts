@@ -6,7 +6,7 @@ import { loadPyodide } from "pyodide";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ContentError, compileLesson, kidTextProblems, validateLibrary } from "../../src/content/compile";
 import { loadLibraryFromDisk } from "../../src/content/disk";
-import type { Lesson } from "../../src/content/schema";
+import type { DataFile, Lesson } from "../../src/content/schema";
 import { allPassed, runChecks } from "../../src/learn/checker";
 import type { ProgramResult, ProgramRunner } from "../../src/learn/checker";
 import { escapeSpacesInStringLiterals } from "../../src/runners/c/prepare-source";
@@ -105,7 +105,18 @@ describe("compileLesson", () => {
     expect(lesson.bodyHtml).toContain("&lt;script&gt;");
   });
 
+  it("collects data files and keeps them visible in the text", () => {
+    const lesson = compileLesson(`${HEADER}---\nRead this file.\n\n\`\`\`text {role=file file=temps.txt}\n21.5\n22.0\n\`\`\`\n\n::: kid\nHi there.\n:::\n`, "sample.md");
+    expect(lesson.files).toEqual([{ name: "temps.txt", text: "21.5\n22.0\n" }]);
+    expect(lesson.bodyHtml).toContain("<code>temps.txt</code>");
+    expect(lesson.bodyHtml).toContain("21.5");
+  });
+
   const broken: [string, string, RegExp][] = [
+    ["a data file without a name", `${HEADER}---${BODY}\n\`\`\`text {role=file}\nx\n\`\`\`\n`, /needs file=<name>/],
+    ["a data file name with a folder", `${HEADER}---${BODY}\n\`\`\`text {role=file file=data/x.txt}\nx\n\`\`\`\n`, /needs file=<name>/],
+    ["two data files with one name", `${HEADER}---${BODY}\n\`\`\`text {role=file file=x.txt}\na\n\`\`\`\n\n\`\`\`text {role=file file=x.txt}\nb\n\`\`\`\n`, /second data file called x.txt/],
+    ["a file check in a Python lesson", `${HEADER.replace("language: c", "language: python")}checks:\n  - {type: file-equals, file: out.txt, expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```python")}`, /file-equals only works in C/],
     ["no kid block", `${HEADER}---\nNormal text.\n`, /no "::: kid" block/],
     ["no explanation", `${HEADER}---\n::: kid\nHi there.\n:::\n`, /no explanation/],
     ["a long kid sentence", `${HEADER}---\nText.\n\n::: kid\nThis sentence just keeps on going and going with far too many words in it.\n:::\n`, /sentence has 15 words/],
@@ -190,13 +201,18 @@ const library = loadLibraryFromDisk();
 
 // Lesson programs are small. The step limit turns a loop that never ends
 // into a failed test instead of a test run that never finishes.
-const runC: ProgramRunner = async (code, stdin): Promise<ProgramResult> => {
-  try {
-    return { stdout: runCWithLimit(escapeSpacesInStringLiterals(code), stdin, 1_000_000).stdout, ok: true };
-  } catch (error) {
-    return { stdout: "", ok: false, error: String(error), ...(error instanceof StepLimitError ? { timedOut: true } : {}) };
-  }
-};
+// Each run gets a fresh copy of the lesson's data files.
+const cRunner =
+  (dataFiles: readonly DataFile[] = []): ProgramRunner =>
+  async (code, stdin): Promise<ProgramResult> => {
+    const files = Object.fromEntries(dataFiles.map((file) => [file.name, file.text]));
+    try {
+      return { stdout: runCWithLimit(escapeSpacesInStringLiterals(code), stdin, 1_000_000, files).stdout, ok: true, files };
+    } catch (error) {
+      return { stdout: "", ok: false, error: String(error), files, ...(error instanceof StepLimitError ? { timedOut: true } : {}) };
+    }
+  };
+const runC = cRunner();
 
 let pyodide: Awaited<ReturnType<typeof loadPyodide>>;
 const runPython: ProgramRunner = async (code, stdin): Promise<ProgramResult> => {
@@ -215,12 +231,15 @@ const runPython: ProgramRunner = async (code, stdin): Promise<ProgramResult> => 
   }
 };
 
-const RUNNERS: Partial<Record<Lesson["language"], ProgramRunner>> = { c: runC, cpp: runC, python: runPython };
+function runnerFor(language: Lesson["language"], files: readonly DataFile[]): ProgramRunner | undefined {
+  if (language === "c" || language === "cpp") return cRunner(files);
+  return language === "python" ? runPython : undefined;
+}
 
 describe("step-limited C runner", () => {
   it("matches a normal run", async () => {
     const result = await runC('#include <stdio.h>\nint main() {\n    int a;\n    scanf("%d", &a);\n    printf("%d\\n", a * 2);\n    return 0;\n}', ["21"]);
-    expect(result).toEqual({ stdout: "42\n", ok: true });
+    expect(result).toEqual({ stdout: "42\n", ok: true, files: {} });
   });
 
   it("stops a loop that never ends instead of hanging", () => {
@@ -247,7 +266,7 @@ describe("lesson library", () => {
 
   it.each(withTryIt.map((item) => [item.id, item] as const))("%s: the solution passes its checks", async (_id, item) => {
     const tryIt = item.tryIt!;
-    const run = RUNNERS[tryIt.solution.language];
+    const run = runnerFor(tryIt.solution.language, item.files);
     expect(run, `no test runner for ${tryIt.solution.language}`).toBeDefined();
     const outcomes = await runChecks(tryIt.solution.code, tryIt.solution.language, tryIt.checks, run!);
     expect(outcomes.filter((outcome) => !outcome.pass)).toEqual([]);
@@ -256,13 +275,13 @@ describe("lesson library", () => {
 
   it.each(withTryIt.map((item) => [item.id, item] as const))("%s: the starter does not pass yet", async (_id, item) => {
     const tryIt = item.tryIt!;
-    const outcomes = await runChecks(tryIt.starter.code, tryIt.starter.language, tryIt.checks, RUNNERS[tryIt.starter.language]!);
+    const outcomes = await runChecks(tryIt.starter.code, tryIt.starter.language, tryIt.checks, runnerFor(tryIt.starter.language, item.files)!);
     expect(allPassed(outcomes)).toBe(false);
   });
 
   it.each(library.lessons.filter((item) => item.example).map((item) => [item.id, item] as const))("%s: the example runs without an error", async (_id, item) => {
     const example = item.example!;
-    const result = await RUNNERS[example.language]!(example.code, []);
+    const result = await runnerFor(example.language, item.files)!(example.code, []);
     expect(result.error).toBeUndefined();
     expect(result.stdout.trim().length).toBeGreaterThan(0);
   });

@@ -13,6 +13,15 @@ const EXTENSIONS: Record<string, Language> = {
   py: "python",
   java: "java",
   m: "matlab",
+  txt: "text",
+  csv: "text",
+  tsv: "text",
+  dat: "text",
+  log: "text",
+  json: "text",
+  md: "text",
+  ini: "text",
+  cfg: "text",
 };
 
 /** Language for a file name, by extension. Unknown or missing extensions count as C. */
@@ -35,5 +44,7 @@ export function extensionForLanguage(language: Language): string {
       return "m";
     case "c":
       return "c";
+    case "text":
+      return "txt";
   }
 }

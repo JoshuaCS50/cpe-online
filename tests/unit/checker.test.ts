@@ -111,6 +111,21 @@ describe("runChecks", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("compares a file the program wrote, sharing the run with output checks", async () => {
+    const { run, calls } = fakeRunner(() => ({ stdout: "saved\n", files: { "log.txt": "1\n2  \n\n" } }));
+    const checks: Check[] = [
+      { type: "stdout-equals", stdin: [], expect: "saved\n" },
+      { type: "file-equals", stdin: [], file: "log.txt", expect: "1\n2\n" },
+      { type: "file-equals", stdin: [], file: "log.txt", expect: "1\n3\n" },
+      { type: "file-equals", stdin: [], file: "other.txt", expect: "x" },
+    ];
+    const outcomes = await runChecks("", "c", checks, run);
+    expect(outcomes.map((outcome) => outcome.pass)).toEqual([true, true, false, false]);
+    expect(outcomes[2]).toMatchObject({ detail: "The file does not hold what the task asks for.", actual: "1\n2", actualLabel: "Your file holds" });
+    expect(outcomes[3]?.detail).toBe("The program did not write a file called other.txt.");
+    expect(calls).toHaveLength(1);
+  });
+
   it("does not count an empty list of checks as a pass", () => {
     expect(allPassed([])).toBe(false);
   });

@@ -46,7 +46,8 @@ export function createCaptureConsole(stdin: readonly string[]): CaptureConsole {
 }
 
 /** A runner for the checker. `signal` lets the learner cancel a check in progress. */
-export function createProgramRunner(language: LessonLanguage, fileName: string, signal?: AbortSignal): ProgramRunner {
+/** `files` are the data files the program can open; each run starts from a fresh copy. */
+export function createProgramRunner(language: LessonLanguage, fileName: string, signal?: AbortSignal, files: Record<string, string> = {}): ProgramRunner {
   return async (code, stdin): Promise<ProgramResult> => {
     const consoleIO = createCaptureConsole(stdin);
     const abort = new AbortController();
@@ -58,6 +59,7 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
       abort.abort();
     }, TIME_LIMIT_MS[language]);
     let error: string | undefined;
+    let filesAfter: Record<string, string> | undefined;
     try {
       const result = await runProgram({
         language,
@@ -66,8 +68,16 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
         consoleIO,
         signal: abort.signal,
         onError: (raw) => void (error = raw.text),
+        files: { ...files },
+        onFiles: (after) => void (filesAfter = after),
       });
-      return { stdout: consoleIO.stdout(), ok: result.ok && !timedOut, ...(error ? { error } : {}), ...(timedOut ? { timedOut } : {}) };
+      return {
+        stdout: consoleIO.stdout(),
+        ok: result.ok && !timedOut,
+        files: filesAfter ?? { ...files },
+        ...(error ? { error } : {}),
+        ...(timedOut ? { timedOut } : {}),
+      };
     } catch (failure) {
       return { stdout: consoleIO.stdout(), ok: false, error: failure instanceof Error ? failure.message : String(failure) };
     } finally {

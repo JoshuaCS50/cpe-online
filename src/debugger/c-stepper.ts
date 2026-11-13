@@ -21,6 +21,9 @@ export interface CStepper {
 
 const FUNCTION_PREFIX = "function ";
 
+/** Globals that <stdio.h> and <stdlib.h> define. */
+const LIBRARY_GLOBALS = new Set(["NULL", "EOF", "stdin", "stdout", "stderr"]);
+
 function isFunctionScope(scope: JscppScope): boolean {
   return typeof scope.$name === "string" && scope.$name.startsWith(FUNCTION_PREFIX);
 }
@@ -55,8 +58,8 @@ export function createCStepper(dbg: JscppDebugger): CStepper {
     try {
       return dbg
         .variable()
-        // NULL is a library constant, not a variable the student made.
-        .filter((variable) => variable.value !== undefined && variable.name !== "NULL")
+        // Library constants, not variables the student made.
+        .filter((variable) => variable.value !== undefined && !LIBRARY_GLOBALS.has(variable.name))
         .map((variable) => ({ name: variable.name, value: String(variable.value), type: variable.type }));
     } finally {
       dbg.rt.scope = all;

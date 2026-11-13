@@ -95,13 +95,15 @@ async function loadLanguage(language: string): Promise<Extension> {
       ]);
       return StreamLanguage.define(octave);
     }
+    case "text":
+      return [];
     default:
       return cpp();
   }
 }
 
 function isBundled(language: string): boolean {
-  return language !== "python" && language !== "java" && language !== "matlab";
+  return language !== "python" && language !== "java" && language !== "matlab" && language !== "text";
 }
 
 // ───── Theme: everything is a CSS variable ─────

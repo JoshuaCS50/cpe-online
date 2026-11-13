@@ -28,13 +28,17 @@
 //   ```c {role=solution}
 //   ```
 //
+//   ```text {role=file file=temps.txt}
+//   a data file the lesson's programs can open; it is shown in the text too
+//   ```
+//
 // Fenced blocks without a role stay inside the text they appear in.
 
 import { Marked } from "marked";
 import { parse as parseYaml } from "yaml";
 
 import { frontmatterSchema } from "./schema";
-import type { CodeSample, Frontmatter, Lesson, LessonLanguage } from "./schema";
+import type { CodeSample, DataFile, Frontmatter, Lesson, LessonLanguage } from "./schema";
 import { findTrack, findUnit } from "./tracks";
 
 /** Everything wrong with one lesson file, reported together. */
@@ -131,12 +135,17 @@ function parseAttributes(raw: string | undefined): Record<string, string> {
 interface ParsedBody {
   sections: Record<Section, string>;
   samples: Partial<Record<Role, { language: string; fileName?: string; code: string }>>;
+  files: DataFile[];
 }
+
+/** A data file name: no folders, so it means the same in every run. */
+const DATA_FILE_NAME = /^[A-Za-z0-9_.-]+$/;
 
 function parseBody(text: string, problems: string[]): ParsedBody {
   const buffers: Record<Section, string[]> = { body: [], kid: [], try: [], "try-kid": [] };
   const seen = new Set<Container>();
   const samples: ParsedBody["samples"] = {};
+  const files: DataFile[] = [];
   const lines = text.split("\n");
   let section: Section = "body";
 
@@ -156,7 +165,17 @@ function parseBody(text: string, problems: string[]): ParsedBody {
       if (end >= lines.length) problems.push(`line ${index + 1}: code block is never closed`);
 
       const role = attributes.role;
-      if (role === undefined) {
+      if (role === "file") {
+        const name = attributes.file ?? "";
+        if (section !== "body") problems.push(`line ${index + 1}: a {role=file} block must sit outside "::: ${section}"`);
+        else if (!DATA_FILE_NAME.test(name)) problems.push(`line ${index + 1}: a {role=file} block needs file=<name>: letters, digits, dots, dashes and underscores only`);
+        else if (files.some((file) => file.name === name)) problems.push(`line ${index + 1}: second data file called ${name}`);
+        else {
+          files.push({ name, text: code.length > 0 ? code.join("\n") + "\n" : "" });
+          // The learner sees the file in the text, under its name.
+          buffers.body.push(`File \`${name}\`:`, "", `${marker}${fence[2] ?? ""}`, ...code, marker);
+        }
+      } else if (role === undefined) {
         // Ordinary code block: keep it in the text, fences and all, without its attributes.
         buffers[section].push(`${marker}${fence[2] ?? ""}`, ...code, marker);
       } else if (!(ROLES as readonly string[]).includes(role)) {
@@ -204,6 +223,7 @@ function parseBody(text: string, problems: string[]): ParsedBody {
       "try-kid": buffers["try-kid"].join("\n").trim(),
     },
     samples,
+    files,
   };
 }
 
@@ -276,7 +296,7 @@ export function compileLesson(source: string, file: string): Lesson {
 
   const problems: string[] = [];
   const rest = text.slice(headerEnd + 4).replace(/^[^\n]*\n?/, "");
-  const { sections, samples } = parseBody(rest, problems);
+  const { sections, samples, files } = parseBody(rest, problems);
 
   if (sections.body === "") problems.push("the lesson has no explanation");
   if (sections.kid === "") problems.push('the lesson has no "::: kid" block; every lesson needs one');
@@ -306,6 +326,9 @@ export function compileLesson(source: string, file: string): Lesson {
       problems.push(`hints (${frontmatter.hints.length}) and hintsKid (${frontmatter.hintsKid.length}) must have the same number of entries`);
     }
     for (const check of frontmatter.checks) {
+      if (check.type === "file-equals" && frontmatter.language !== "c" && frontmatter.language !== "cpp") {
+        problems.push("check file-equals only works in C and C++ lessons, whose programs can write files here");
+      }
       if (check.type !== "stdout-regex" && check.type !== "code-contains") continue;
       try {
         new RegExp(check.pattern);
@@ -350,6 +373,7 @@ export function compileLesson(source: string, file: string): Lesson {
     kidHtml: render(sections.kid),
     ...(example ? { example } : {}),
     ...(tryIt ? { tryIt } : {}),
+    files,
   };
 }
 

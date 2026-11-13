@@ -497,7 +497,7 @@ const PATCHES = [
     "debugger: show a struct's members instead of <object>",
     1,
     `else this.isClassType(a.t)&&(c="<object>");return c}`,
-    `else this.isClassType(a.t)&&(c=a.v&&a.v.members?"{"+Object.keys(a.v.members).map(function(k){return k+": "+this.makeValueString(a.v.members[k],b)},this).join(", ")+"}":"<object>");return c}`,
+    `else this.isClassType(a.t)&&(c=a.v&&a.v.members?"{"+Object.keys(a.v.members).map(function(k){return k+": "+this.makeValueString(a.v.members[k],b)},this).join(", ")+"}":a.v&&a.v.file?"<file "+a.v.file.name+">":"<object>");return c}`,
   ],
   [
     "debugger: show a NULL pointer as NULL instead of crashing",
@@ -534,6 +534,113 @@ const PATCHES = [
     1,
     String.raw`c=q(a,b,"([\\w\\]=-]|\\S[^\\][^\\ ])+(\\\\[\\w\\ ][\\w\\:]*)*","STR")`,
     String.raw`c=q(a,b,"\\S+","STR")`,
+  ],
+  // ---- scanf's result, getchar at the end, EOF. Upstream scanf and sscanf
+  // returned the number of % codes, not how many values were read, and a
+  // failed match crashed with "Memory overflow". getchar() gave 0 at the end
+  // of input, and EOF did not exist.
+  [
+    "scanf: read one % code at a time, stop at the first that fails, and return how many values were stored, or EOF",
+    1,
+    `F=function(){var a,b,c,d,e,g,h,j,k,l;for(k=arguments[0],a=arguments[1],j=arguments[2],b=4<=arguments.length?i.call(arguments,3):[],c=k.getStringFromCharArray(j),h=f(c),d=e=0,g=h.length;e<g;d=++e)l=h[d],G(b[d],l);return k.val(k.intTypeLiteral,h.length)}`,
+    String.raw`N.__scan=function(fmt,args){var parts=fmt.match(/[^%]*%[A-Za-z][^%]*/g)||[],n=0,x,k;for(k=0;k<parts.length;k++){if(x=l(parts[k]),null==x||"number"==typeof x&&isNaN(x)||""===x)break;k>=args.length&&b.raiseException("scanf has more % codes than variables to store into");G(args[k],x),n++}return 0===n&&parts.length>0&&!/\S/.test(M)?-1:n},` +
+      `F=function(){var b,c,j,k;return k=arguments[0],j=arguments[2],b=4<=arguments.length?i.call(arguments,3):[],c=k.getStringFromCharArray(j),k.val(k.intTypeLiteral,N.__scan(c,b))}`,
+  ],
+  [
+    "sscanf: the same, reading from the string",
+    1,
+    `I=function(){var a,b,c,d,e,g,h,j,k,l,m,n,o;for(n=arguments[0],a=arguments[1],m=arguments[2],d=arguments[3],b=5<=arguments.length?i.call(arguments,4):[],c=n.getStringFromCharArray(d),l=n.getStringFromCharArray(m),k=M,M=l,N.__sscanf=1,j=f(c),e=g=0,h=j.length;g<h;e=++g)o=j[e],G(b[e],o);return M=k,N.__sscanf=0,n.val(n.intTypeLiteral,j.length)}`,
+    `I=function(){var b,c,d,k,l,m,n,r;n=arguments[0],m=arguments[2],d=arguments[3],b=5<=arguments.length?i.call(arguments,4):[],c=n.getStringFromCharArray(d),l=n.getStringFromCharArray(m),k=M,M=l,N.__sscanf=1;try{r=N.__scan(c,b)}finally{M=k,N.__sscanf=0}return n.val(n.intTypeLiteral,r)}`,
+  ],
+  [
+    "getchar: return EOF (-1) at the end of input, not 0",
+    1,
+    `w=function(a,b){var c,e;try{return c=j(),a.val(a.intTypeLiteral,c.charCodeAt(0))}catch(b){return e=b,a.val(a.intTypeLiteral,d)}}`,
+    `w=function(a,b){var c,e;try{return c=j(),a.val(a.intTypeLiteral,c.charCodeAt(0))}catch(b){return e=b,a.val(a.intTypeLiteral,-1)}}`,
+  ],
+  // ---- Files. Upstream had none. Files live in config.files, a plain
+  // object of name -> text that the host fills before the run and reads
+  // back afterwards, so what a program writes can be shown or kept.
+  [
+    "stdio.h: FILE, fopen, fclose, fprintf, fputs, fputc, fgetc, getc, fgets, fscanf, feof, rewind, fflush, stdin, stdout, stderr and EOF",
+    1,
+    `b.regFunc(I,"global","sscanf",[L,L,"?"],b.intTypeLiteral)}}}`,
+    String.raw`b.regFunc(I,"global","sscanf",[L,L,"?"],b.intTypeLiteral),function(){` +
+      `var rt=b,FS=rt.config.files||(rt.config.files={}),FT={type:"class",name:"FILE"},FP,mk,getF,canRead,canWrite,put,readChar,str,I32=rt.intTypeLiteral,num,std,MODES=["r","w","a","r+","w+","a+","rb","wb","ab","rb+","wb+","ab+","r+b","w+b","a+b"];` +
+      `rt.types[rt.getTypeSignature(FT)]=Object.create(null),FP=rt.normalPointerType(FT);` +
+      `mk=function(F){return rt.val(FP,rt.makeNormalPointerValue(rt.val(FT,{file:F},!0)))};` +
+      `str=function(v){return rt.getStringFromCharArray(v)};num=function(n){return rt.val(I32,n)};` +
+      `std={stdin:{name:"stdin",std:"in",read:!0,write:!1,eof:0},stdout:{name:"stdout",std:"out",read:!1,write:!0,eof:0},stderr:{name:"stderr",std:"out",read:!1,write:!0,eof:0}};` +
+      `rt.scope[0].stdin=mk(std.stdin),rt.scope[0].stdout=mk(std.stdout),rt.scope[0].stderr=mk(std.stderr),rt.scope[0].EOF=num(-1);` +
+      `getF=function(p){var t=p&&p.v&&p.v.target,F;null==t&&rt.raiseException("null file: this FILE pointer is NULL, usually because fopen could not open the file. Check it with if (f == NULL) before using it");t.v&&t.v.file||rt.raiseException("this is not a file from fopen");F=t.v.file;F.closed&&rt.raiseException("file already closed: "+F.name+" was closed with fclose, so it cannot be used any more");return F};` +
+      `canRead=function(F){F.read||rt.raiseException("file not open for reading: "+F.name+' was opened with "'+F.mode+'", so it can only be written. Open it with "r" to read it')};` +
+      `canWrite=function(F){F.write||rt.raiseException("file not open for writing: "+F.name+' was opened with "r", so it can only be read. Open it with "w" or "a" to write to it')};` +
+      `put=function(F,s){var t;if(canWrite(F),"out"===F.std)return void N.write(s);F.append?FS[F.name]+=s:(t=FS[F.name],FS[F.name]=t.slice(0,F.pos)+s+t.slice(F.pos+s.length),F.pos+=s.length)};` +
+      `readChar=function(F){var s,c;if(canRead(F),"in"===F.std)return M.length>0||N.__refill(),M.length>0?(c=M.charCodeAt(0),M=M.substr(1),c):(F.eof=1,-1);s=FS[F.name];return F.pos>=s.length?(F.eof=1,-1):s.charCodeAt(F.pos++)};` +
+      `rt.regFunc(function(r,t,name,mode){var n=str(name),m=str(mode),F;MODES.indexOf(m)<0&&rt.raiseException('fopen: the mode must be "r" (read), "w" (write) or "a" (add to the end), not "'+m+'"');F={name:n,mode:m,pos:0,eof:0,read:"r"===m[0]||m.indexOf("+")>=0,write:"r"!==m[0]||m.indexOf("+")>=0,append:"a"===m[0]};if("r"===m[0]&&!Object.prototype.hasOwnProperty.call(FS,n))return rt.val(FP,rt.nullPointerValue);"w"===m[0]?FS[n]="":"a"===m[0]&&(FS[n]=FS[n]||"");return mk(F)},"global","fopen",[L,L],FP);` +
+      `rt.regFunc(function(r,t,p){var F=getF(p);return F.std||(F.closed=!0),num(0)},"global","fclose",[FP],I32);` +
+      `rt.regFunc(function(r,t,p){var c=arguments.length>4?i.call(arguments,4):[],F=getF(p),s=str(e.apply(null,[arguments[3]].concat(c)));return put(F,s),num(s.length)},"global","fprintf",[FP,L,"?"],I32);` +
+      `rt.regFunc(function(r,t,s,p){return put(getF(p),str(s)),num(0)},"global","fputs",[L,FP],I32);` +
+      `rt.regFunc(function(r,t,c,p){return put(getF(p),String.fromCharCode(c.v)),num(c.v)},"global","fputc",[I32,FP],I32);` +
+      `rt.regFunc(function(r,t,p){return num(readChar(getF(p)))},"global","fgetc",[FP],I32);` +
+      `rt.regFunc(function(r,t,p){return num(readChar(getF(p)))},"global","getc",[FP],I32);` +
+      `rt.regFunc(function(r,t,buf,n,p){var F=getF(p),max=n.v-1,out="",c,k,tg;for(canRead(F);out.length<max&&(c=readChar(F),!(c<0))&&(out+=String.fromCharCode(c),10!==c););if(!out.length)return rt.val(L,rt.nullPointerValue);rt.isArrayType(buf.t)||rt.raiseException("fgets needs a char array to read into");tg=buf.v.target;tg.length-buf.v.position<out.length+1&&rt.raiseException("fgets was told the array holds "+n.v+" characters, but it only has room for "+(tg.length-buf.v.position)+". Use sizeof(line) for the size");for(k=0;k<out.length;k++)tg[buf.v.position+k].v=out.charCodeAt(k);return tg[buf.v.position+out.length].v=0,buf},"global","fgets",[L,I32,FP],L);` +
+      `rt.regFunc(function(r,t,p,fmt){var args=arguments.length>4?i.call(arguments,4):[],F=getF(p),c=str(fmt),s,k,res;if(canRead(F),"in"===F.std)return num(N.__scan(c,args));s=FS[F.name].slice(F.pos),k=M,M=s,N.__sscanf=1;try{res=N.__scan(c,args),F.pos+=s.length-M.length,res<0&&(F.eof=1)}finally{M=k,N.__sscanf=0}return num(res)},"global","fscanf",[FP,L,"?"],I32);` +
+      `rt.regFunc(function(r,t,p){return num(getF(p).eof?1:0)},"global","feof",[FP],I32);` +
+      `rt.regFunc(function(r,t,p){var F=getF(p);F.pos=0,F.eof=0},"global","rewind",[FP],rt.voidTypeLiteral);` +
+      `rt.regFunc(function(r,t,p){return getF(p),num(0)},"global","fflush",[FP],I32)` +
+      `}()}}}`,
+  ],
+  // strchr, strrchr and strstr returned a plain pointer holding an array
+  // position, which printf("%s") showed as [object Object] and p[1] could
+  // not index. They now return a pointer into the array, like p = &s[2].
+  [
+    "%s and other text reads start where the pointer points, so printf(\"%s\", s + 2) skips two characters",
+    1,
+    `if(this.isStringType(a.t)){for(e=a.v.target,d="",c=0;`,
+    `if(this.isStringType(a.t)){for(e=a.v.target,d="",c=a.v.position||0;`,
+  ],
+  [
+    "string.h: strchr returns a usable pointer into the string",
+    1,
+    `f[g].v===e.v?a.val(d,a.makeArrayPointerValue(f,g))`,
+    `f[g].v===e.v?a.val(a.arrayPointerType(a.charTypeLiteral,f.length),a.makeArrayPointerValue(f,g))`,
+  ],
+  [
+    "string.h: strrchr returns a usable pointer into the string",
+    1,
+    `h>=0?a.val(d,a.makeArrayPointerValue(f,h))`,
+    `h>=0?a.val(a.arrayPointerType(a.charTypeLiteral,f.length),a.makeArrayPointerValue(f,h))`,
+  ],
+  [
+    "string.h: strstr returns a usable pointer into the string",
+    1,
+    `:a.val(d,a.makeArrayPointerValue(g,h))}return a.raiseException("str1 or str2 is not an array")`,
+    `:a.val(a.arrayPointerType(a.charTypeLiteral,g.length),a.makeArrayPointerValue(g,h))}return a.raiseException("str1 or str2 is not an array")`,
+  ],
+  [
+    "string.h: strstr compares the right characters and stops at the end of the word it looks for",
+    1,
+    `for(i=e.v.position,f=h;i<j.length&&c[f].v===e[i];)f++,i++;if(i===j.length)break;h++`,
+    `for(i=e.v.position,f=h;i<j.length&&0!==j[i].v&&f<g.length&&g[f].v===j[i].v;)f++,i++;if(i>=j.length||0===j[i].v)break;h++`,
+  ],
+  [
+    "string.h: strstr takes two strings, not a string and a char",
+    1,
+    `"global","strstr",[d,b.charTypeLiteral],d)`,
+    `"global","strstr",[d,d],d)`,
+  ],
+  [
+    "scanf %d: read a decimal number only, so letters are left for the next read and 010 is ten",
+    1,
+    `r=function(a,b){var c;return c=q(a,b,"[-]?[A-Za-z0-9]+"),c?"0"===c[0]?"x"===c[1]||"X"===c[1]?y(c):A(c):parseInt(c):null}`,
+    `r=function(a,b){var c;return c=q(a,b,"[-+]?[0-9]+"),c?parseInt(c,10):null}`,
+  ],
+  [
+    "string.h: strtok, which splits text at any of the given characters",
+    1,
+    `"global","strchr",[d,b.charTypeLiteral],d),`,
+    `"global","strchr",[d,b.charTypeLiteral],d),b.regFunc(function(a,t,s,dl){var st,tg,p,set,start;if(set=a.getStringFromCharArray(dl),null!=s.v.target){a.isArrayType(s.t)||a.raiseException("strtok needs a char array it may change");a.__strtok={t:s.v.target,p:s.v.position}}st=a.__strtok;if(!st||!st.t)return a.val(d,a.nullPointerValue);for(tg=st.t,p=st.p;p<tg.length&&0!==tg[p].v&&set.indexOf(String.fromCharCode(tg[p].v))>=0;)p++;if(p>=tg.length||0===tg[p].v)return st.t=null,a.val(d,a.nullPointerValue);for(start=p;p<tg.length&&0!==tg[p].v&&set.indexOf(String.fromCharCode(tg[p].v))<0;)p++;p<tg.length&&0!==tg[p].v?(tg[p].v=0,st.p=p+1):st.p=p;return a.val(a.arrayPointerType(a.charTypeLiteral,tg.length),a.makeArrayPointerValue(tg,start))},"global","strtok",[d,d],d),`,
   ],
 ];
 

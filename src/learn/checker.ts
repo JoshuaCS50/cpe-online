@@ -15,6 +15,8 @@ export interface ProgramResult {
   error?: string;
   /** True when the program was stopped for running too long. */
   timedOut?: boolean;
+  /** Every file after the run (C programs), name -> text. */
+  files?: Record<string, string>;
 }
 
 export type ProgramRunner = (code: string, stdin: readonly string[]) => Promise<ProgramResult>;
@@ -27,6 +29,8 @@ export interface CheckOutcome {
   detail?: string;
   expected?: string;
   actual?: string;
+  /** What `actual` is, when it is not the program's output. */
+  actualLabel?: string;
 }
 
 /** Output as a learner sees it: line endings unified, trailing spaces and blank end lines dropped. */
@@ -111,6 +115,18 @@ export async function runChecks(
         if (failure) outcomes.push({ pass: false, title, detail: failure, actual });
         else if (new RegExp(check.pattern).test(actual)) outcomes.push({ pass: true, title });
         else outcomes.push({ pass: false, title, detail: check.message ?? "The output does not have the form the task asks for.", actual });
+        break;
+      }
+      case "file-equals": {
+        const result = await runWith(check.stdin);
+        const title = `The file ${check.file} with ${describeInput(check.stdin)}`;
+        const failure = failedRun(result);
+        const text = result.files?.[check.file];
+        const expected = normalizeOutput(check.expect);
+        if (failure) outcomes.push({ pass: false, title, detail: failure, expected });
+        else if (text === undefined) outcomes.push({ pass: false, title, detail: `The program did not write a file called ${check.file}.`, expected });
+        else if (normalizeOutput(text) === expected) outcomes.push({ pass: true, title });
+        else outcomes.push({ pass: false, title, detail: "The file does not hold what the task asks for.", expected, actual: normalizeOutput(text), actualLabel: "Your file holds" });
         break;
       }
       case "code-contains": {

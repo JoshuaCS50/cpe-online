@@ -36,7 +36,7 @@ export interface InteractiveRun {
  * entry of `lines` (a newline is appended). When `lines` runs out, requests
  * get end-of-input.
  */
-export function runCInteractive(code: string, lines: readonly string[]): InteractiveRun {
+export function runCInteractive(code: string, lines: readonly string[], files?: Record<string, string>): InteractiveRun {
   const jscpp = loadJscpp();
   const remaining = [...lines];
   let stdout = "";
@@ -52,6 +52,8 @@ export function runCInteractive(code: string, lines: readonly string[]): Interac
         return next === undefined ? null : next + "\n";
       },
     },
+    // The patched build reads and writes files in this object.
+    files,
   });
   return { stdout, requests, unused: remaining };
 }
@@ -60,12 +62,13 @@ export function runCInteractive(code: string, lines: readonly string[]): Interac
  * Starts `code` under JSCPP's debugger and returns the raw debugger object
  * plus a way to read what the program has printed so far.
  */
-export function debugC(code: string, lines: readonly string[] = []): { debuggerObject: unknown; stdout: () => string } {
+export function debugC(code: string, lines: readonly string[] = [], files?: Record<string, string>): { debuggerObject: unknown; stdout: () => string } {
   const jscpp = loadJscpp();
   const remaining = [...lines];
   let stdout = "";
   const debuggerObject = jscpp.run(code, "", {
     debug: true,
+    files,
     stdio: {
       write: (text: string) => {
         stdout += text;
@@ -91,9 +94,10 @@ export class StepLimitError extends Error {
  * Runs `code` like `runCInteractive`, but gives up after `maxSteps`
  * interpreter steps. JSCPP runs synchronously and has no time limit, so
  * without this a program that loops forever would hang the test run.
+ * `files` is changed in place, as the browser runtime does.
  */
-export function runCWithLimit(code: string, lines: readonly string[], maxSteps = 2_000_000): { stdout: string } {
-  const { debuggerObject, stdout } = debugC(code, lines);
+export function runCWithLimit(code: string, lines: readonly string[], maxSteps = 2_000_000, files?: Record<string, string>): { stdout: string } {
+  const { debuggerObject, stdout } = debugC(code, lines, files);
   const dbg = debuggerObject as { next(): unknown };
   for (let steps = 0; steps < maxSteps; steps += 1) {
     const result = dbg.next();

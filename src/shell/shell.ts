@@ -39,7 +39,7 @@ type View = "files" | "code" | "terminal";
 /** What the side panel is showing. */
 type SideView = "files" | "examples" | "reference" | "settings";
 
-const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java", matlab: "MATLAB" };
+const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java", matlab: "MATLAB", text: "Text" };
 
 function currentTier(): Tier {
   if (window.matchMedia("(max-width: 599px)").matches) return "phone";
@@ -57,7 +57,8 @@ export interface ShellHandle {
   /** Switches the page between the IDE and the lessons. */
   setMode(mode: Mode): void;
   /** Adds a file to the explorer and opens it. */
-  openInEditor(fileName: string, code: string): Promise<void>;
+  /** Adds the code as a new file and shows it. Data files are added too, unless a file of that name exists. */
+  openInEditor(fileName: string, code: string, dataFiles?: Record<string, string>): Promise<void>;
 }
 
 export async function bootShell(): Promise<ShellHandle> {
@@ -383,7 +384,8 @@ export async function bootShell(): Promise<ShellHandle> {
   function syncEditor(): void {
     const file = workspace.activeFile;
     editorPane.classList.toggle("is-empty", file === null);
-    runButton.disabled = running || file === null;
+    // A data file is read by programs, not run.
+    runButton.disabled = running || file === null || file.language === "text";
     debugButton.disabled = running || !canDebug(file?.language);
     if (!file) {
       loadedFileId = null;
@@ -394,7 +396,8 @@ export async function bootShell(): Promise<ShellHandle> {
     pathEl.textContent = `~/${workspace.project.name.toLowerCase().replace(/\s+/g, "-")}/${file.name}`;
     languageChip.textContent = LANGUAGE_LABELS[file.language] ?? file.language;
     symbolBar.setLanguage(file.language);
-    if (file.id !== loadedFileId) {
+    // A program may also have rewritten the open file with fopen.
+    if (file.id !== loadedFileId || editor.getDoc() !== file.doc) {
       loading = true;
       loadedFileId = file.id;
       editor.setDoc(file.doc);
@@ -420,7 +423,7 @@ export async function bootShell(): Promise<ShellHandle> {
 
   function setRunning(next: boolean, language?: string): void {
     running = next;
-    runButton.disabled = next || workspace.activeFile === null;
+    runButton.disabled = next || workspace.activeFile === null || workspace.activeFile.language === "text";
     debugButton.disabled = next || !canDebug(workspace.activeFile?.language);
     stopButton.disabled = !next || !canStop(language);
     shell.dataset.running = String(next);
@@ -498,6 +501,21 @@ export async function bootShell(): Promise<ShellHandle> {
   renderProblems();
   showPanelTab("terminal");
 
+  /** Every file in the project, for fopen: a program can read any of them. */
+  function programFiles(): Record<string, string> {
+    return Object.fromEntries(workspace.files.map((file) => [file.name, file.doc]));
+  }
+
+  /** Keeps what the program wrote and says so in the terminal. */
+  async function saveWrittenFiles(written: Record<string, string>): Promise<void> {
+    try {
+      const names = await workspace.saveProgramFiles(written);
+      if (names.length) consoleIO.writeInfo(`\n[saved ${names.join(", ")} in the explorer]\n`);
+    } catch (error) {
+      consoleIO.writeErr(`\nCould not save the files the program wrote: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+
   async function debug(): Promise<void> {
     const file = workspace.activeFile;
     if (running || !file || !canDebug(file.language)) return;
@@ -534,6 +552,8 @@ export async function bootShell(): Promise<ShellHandle> {
       breakpoints: breakpointsByFile.get(file.id) ?? [],
       onErrorLine: (line) => editor.highlightErrorLine(line),
       onError: (text) => reportError(file, { language: file.language, text }),
+      files: programFiles(),
+      onFiles: (written) => void saveWrittenFiles(written),
       listener: {
         onPaused: (state) => {
           if (workspace.activeFile?.id !== debugFileId && debugFileId !== null) workspace.open(debugFileId);
@@ -586,6 +606,8 @@ export async function bootShell(): Promise<ShellHandle> {
         consoleIO,
         signal: abort.signal,
         onError: (error) => reportError(file, error),
+        files: programFiles(),
+        onFiles: (written) => void saveWrittenFiles(written),
       });
       if (result.stopped) outcome = "Stopped";
       else if (!result.ok) outcome = "Failed";
@@ -703,7 +725,9 @@ export async function bootShell(): Promise<ShellHandle> {
       root.dataset.mode = mode;
       applySettings();
     },
-    async openInEditor(fileName, code) {
+    async openInEditor(fileName, code, dataFiles = {}) {
+      const taken = new Set(workspace.files.map((existing) => existing.name));
+      await workspace.saveProgramFiles(Object.fromEntries(Object.entries(dataFiles).filter(([name]) => !taken.has(name))));
       const file = await workspace.addFile(fileName, code);
       workspace.open(file.id);
       revealEditor();

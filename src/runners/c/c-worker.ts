@@ -46,9 +46,10 @@ function loadJscpp(): Promise<Jscpp> {
   return jscppPromise;
 }
 
-function config(stdin: string, input: SharedArrayBuffer | null): JscppConfig {
+function config(stdin: string, input: SharedArrayBuffer | null, files: Record<string, string>): JscppConfig {
   let queued = stdin;
   return {
+    files,
     stdio: {
       write: (text) => post({ type: "stdout", text }),
       // The patched JSCPP build calls this each time the program reads and
@@ -69,11 +70,23 @@ function config(stdin: string, input: SharedArrayBuffer | null): JscppConfig {
 
 let stepper: CStepper | null = null;
 
+/** The current run's files, and what they held when it started. */
+let files: Record<string, string> = {};
+let filesAtStart = "{}";
+
+/** Tells the page about files the program created or changed. */
+function reportFiles(): void {
+  const now = JSON.stringify(files);
+  if (now !== filesAtStart) post({ type: "files", files: { ...files } });
+  filesAtStart = now;
+}
+
 function report(outcome: StepOutcome): void {
   if (outcome.kind === "paused") {
     post({ type: "paused", state: outcome.state });
   } else {
     stepper = null;
+    reportFiles();
     post({ type: "done", exitCode: outcome.exitCode });
   }
 }
@@ -87,15 +100,20 @@ async function handle(request: CWorkerRequest): Promise<void> {
 
     const jscpp = await loadJscpp();
     const source = escapeSpacesInStringLiterals(request.code);
-    const options = config(request.stdin, request.input);
+    files = { ...request.files };
+    filesAtStart = JSON.stringify(files);
+    const options = config(request.stdin, request.input, files);
     if (request.type === "run") {
-      post({ type: "done", exitCode: jscpp.run(source, "", options) });
+      const exitCode = jscpp.run(source, "", options);
+      reportFiles();
+      post({ type: "done", exitCode });
     } else {
       stepper = createCStepper(jscpp.run(source, "", { ...options, debug: true }));
       report(stepper.start(new Set(request.breakpoints)));
     }
   } catch (error) {
     stepper = null;
+    reportFiles();
     post({ type: "error", message: error instanceof Error ? error.message : String(error) });
   }
 }
