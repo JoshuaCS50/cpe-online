@@ -100,6 +100,8 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 - `NULL` now comes with `<stdio.h>` as well as `<stdlib.h>`, as in real C.
 - Three upstream bugs in array starting values are fixed: `int a[2] = {x, x};` made the elements and `x` one shared value, a function's `int a[3] = {n};` kept the values of its first call, and `scanf("%s", ...)` left a gap after the word (and ignored `buf + 2`).
 - The debugger shows a struct as `{x: 1, y: 2}` and a NULL pointer as `NULL`.
+- Arrays of pointers (`int *p[3]`, `char *names[] = {...}`, `struct Entry *table[5] = {NULL}`) lost their `*` upstream, so every element was a plain value; a patch fixes it.
+- `scanf("%s", ...)` used a garbled pattern upstream that dropped symbols and kept the newline (`([]{})` came back as `[]{})`); it now reads every character up to the next space, as in real C. A backslash in typed input is still removed.
 - There is no `fgets` (and `gets`, which does exist, is unsafe and removed from modern C), so lessons read text with `scanf("%s", ...)`, one word at a time.
 - There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.
 - Recursion is shallow and slow: every C call uses several JavaScript stack frames, so a few hundred levels already take over a second and around a thousand overflow the stack. Keep recursion in lessons to a few dozen levels. Endless recursion stops with "Maximum call stack size exceeded", which the error catalog explains (`c.recursion-too-deep`).

@@ -520,6 +520,21 @@ const PATCHES = [
     `if(i=b.makeCharArrayFromString(c),i.v.target.length>a.v.target.length)return b.raiseException("Not enough memory on pointer");for(h=[],d=e=0,g=i.v.target.length;0<=g?e<=g:e>=g;d=0<=g?++e:--e)try{h.push(a.v.target[d]=i.v.target[d])}catch(a){h.push(b.raiseException("Not enough memory on pointer"))}return h;`,
     `if(i=b.makeCharArrayFromString(c),i.v.target.length>a.v.target.length-a.v.position)return b.raiseException("Not enough memory on pointer");for(h=[],d=0;d<i.v.target.length;d++)h.push(a.v.target[a.v.position+d].v=i.v.target[d].v);return h;`,
   ],
+  [
+    "arrays of pointers: int *a[3]; makes three pointers, not three ints",
+    1,
+    `case 50:N=c.arrayInit,O=N.call(c,j,l,0,g,e)`,
+    `case 50:N=c.arrayInit,O=N.call(c,j,l,0,c.buildRecursivePointerType(h.Declarator.Pointer,g,0),e)`,
+  ],
+  // Upstream's %s pattern was garbled: it only matched letters, digits and
+  // a few symbols one at a time, so "([]{})" lost its first character and
+  // kept the newline. Real %s reads every character up to the next space.
+  [
+    "scanf %s: read every character up to the next space or newline",
+    1,
+    String.raw`c=q(a,b,"([\\w\\]=-]|\\S[^\\][^\\ ])+(\\\\[\\w\\ ][\\w\\:]*)*","STR")`,
+    String.raw`c=q(a,b,"\\S+","STR")`,
+  ],
 ];
 
 let text = readFileSync(SOURCE, "utf8");

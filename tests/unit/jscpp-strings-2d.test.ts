@@ -116,6 +116,14 @@ describe("arrays of arrays", () => {
   });
 });
 
+describe("scanf %s", () => {
+  it("reads symbols as well as letters, up to the next space", () => {
+    const body = `    char a[20];\n    char b[20];\n    scanf("%s %s", a, b);\n    printf("[%s] [%s] %d\\n", a, b, (int) strlen(a));`;
+    expect(run(body, ["([]{}) a+b*(c-d)"])).toBe("[([]{})] [a+b*(c-d)] 6\n");
+    expect(run(body, [")", "x=1;"])).toBe("[)] [x=1;] 1\n");
+  });
+});
+
 describe("array starting values", () => {
   it("copies each value, so changing the array leaves the variable alone", () => {
     expect(run(`    int x = 1;\n    int a[2] = {x, x};\n    a[0] = 5;\n    printf("%d %d %d\\n", x, a[0], a[1]);`)).toBe("1 5 1\n");

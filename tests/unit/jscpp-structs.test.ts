@@ -608,6 +608,258 @@ int main() {
   });
 });
 
+describe("arrays of pointers", () => {
+  it("keeps the * on each element, which upstream dropped", () => {
+    expect(
+      run(String.raw`#include <stdio.h>
+int main() {
+    int x = 1;
+    int y = 2;
+    int *p[3] = {&x, &y};
+    *p[1] = 20;
+    char *names[3] = {"Ann", "Ben", "Cara"};
+    printf("%d %d %d %s %c\n", y, *p[0], p[2] == NULL, names[2], names[1][0]);
+    return 0;
+}`),
+    ).toBe("20 1 1 Cara B\n");
+  });
+
+  it("holds pointers to structs, all NULL at first", () => {
+    expect(
+      run(POINT + String.raw`
+int main() {
+    struct Point a = {1, 2};
+    struct Point *slots[4] = {NULL};
+    struct Point *more[2];
+    slots[2] = &a;
+    slots[2]->y = 9;
+    int empty = 0;
+    for (int i = 0; i < 4; i++) {
+        if (slots[i] == NULL) {
+            empty++;
+        }
+    }
+    printf("%d %d %d\n", empty, a.y, more[1] == NULL);
+    return 0;
+}`),
+    ).toBe("3 9 1\n");
+  });
+});
+
+describe("data structures built from structs", () => {
+  it("keeps a stack in a struct with an array member, through a pointer", () => {
+    expect(
+      run(String.raw`#include <stdio.h>
+#define MAX 5
+struct Stack {
+    int items[MAX];
+    int top;
+};
+int push(struct Stack *s, int value) {
+    if (s->top == MAX) {
+        return 0;
+    }
+    s->items[s->top] = value;
+    s->top++;
+    return 1;
+}
+int pop(struct Stack *s) {
+    s->top--;
+    return s->items[s->top];
+}
+int main() {
+    struct Stack s;
+    s.top = 0;
+    for (int i = 1; i <= 6; i++) {
+        if (!push(&s, i * 10)) {
+            printf("full at %d\n", i * 10);
+        }
+    }
+    while (s.top > 0) {
+        printf("%d ", pop(&s));
+    }
+    printf("\n");
+    return 0;
+}`),
+    ).toBe("full at 60\n50 40 30 20 10 \n");
+  });
+
+  it("runs a circular queue with % to wrap around", () => {
+    expect(
+      run(String.raw`#include <stdio.h>
+#define SIZE 4
+struct Queue {
+    int items[SIZE];
+    int front;
+    int count;
+};
+void enqueue(struct Queue *q, int value) {
+    q->items[(q->front + q->count) % SIZE] = value;
+    q->count++;
+}
+int dequeue(struct Queue *q) {
+    int value = q->items[q->front];
+    q->front = (q->front + 1) % SIZE;
+    q->count--;
+    return value;
+}
+int main() {
+    struct Queue q = {{0}, 0, 0};
+    enqueue(&q, 1);
+    enqueue(&q, 2);
+    enqueue(&q, 3);
+    printf("%d ", dequeue(&q));
+    printf("%d ", dequeue(&q));
+    enqueue(&q, 4);
+    enqueue(&q, 5);
+    enqueue(&q, 6);
+    while (q.count > 0) {
+        printf("%d ", dequeue(&q));
+    }
+    printf("\n");
+    return 0;
+}`),
+    ).toBe("1 2 3 4 5 6 \n");
+  });
+
+  it("builds a hash table from an array of list heads", () => {
+    expect(
+      run(String.raw`#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define BUCKETS 5
+struct Entry {
+    char key[20];
+    int value;
+    struct Entry *next;
+};
+int hash(char key[]) {
+    int h = 0;
+    for (int i = 0; key[i] != '\0'; i++) {
+        h = (h * 31 + key[i]) % BUCKETS;
+    }
+    return h;
+}
+void put(struct Entry *table[], char key[], int value) {
+    int b = hash(key);
+    for (struct Entry *e = table[b]; e != NULL; e = e->next) {
+        if (strcmp(e->key, key) == 0) {
+            e->value = value;
+            return;
+        }
+    }
+    struct Entry *e = malloc(sizeof(struct Entry));
+    strcpy(e->key, key);
+    e->value = value;
+    e->next = table[b];
+    table[b] = e;
+}
+int get(struct Entry *table[], char key[], int *found) {
+    for (struct Entry *e = table[hash(key)]; e != NULL; e = e->next) {
+        if (strcmp(e->key, key) == 0) {
+            *found = 1;
+            return e->value;
+        }
+    }
+    *found = 0;
+    return 0;
+}
+int main() {
+    struct Entry *table[BUCKETS] = {NULL};
+    put(table, "motor", 3);
+    put(table, "sensor", 8);
+    put(table, "relay", 2);
+    put(table, "motor", 4);
+    int found;
+    int v = get(table, "motor", &found);
+    printf("motor %d %d\n", v, found);
+    get(table, "valve", &found);
+    printf("valve %d\n", found);
+    printf("buckets %d %d\n", hash("motor"), hash("sensor"));
+    int used = 0;
+    for (int b = 0; b < BUCKETS; b++) {
+        for (struct Entry *e = table[b]; e != NULL; e = e->next) {
+            used++;
+        }
+    }
+    printf("%d entries\n", used);
+    return 0;
+}`),
+    ).toMatch(/^motor 4 1\nvalve 0\nbuckets \d \d\n3 entries\n$/);
+  });
+
+  it("builds a binary search tree with recursion", () => {
+    expect(
+      run(String.raw`#include <stdio.h>
+#include <stdlib.h>
+struct Node {
+    int value;
+    struct Node *left;
+    struct Node *right;
+};
+struct Node *insert(struct Node *root, int value) {
+    if (root == NULL) {
+        struct Node *n = malloc(sizeof(struct Node));
+        n->value = value;
+        n->left = NULL;
+        n->right = NULL;
+        return n;
+    }
+    if (value < root->value) {
+        root->left = insert(root->left, value);
+    } else {
+        root->right = insert(root->right, value);
+    }
+    return root;
+}
+void inOrder(struct Node *root) {
+    if (root == NULL) {
+        return;
+    }
+    inOrder(root->left);
+    printf("%d ", root->value);
+    inOrder(root->right);
+}
+int height(struct Node *root) {
+    if (root == NULL) {
+        return 0;
+    }
+    int l = height(root->left);
+    int r = height(root->right);
+    return 1 + (l > r ? l : r);
+}
+int contains(struct Node *root, int value) {
+    while (root != NULL) {
+        if (value == root->value) {
+            return 1;
+        }
+        root = value < root->value ? root->left : root->right;
+    }
+    return 0;
+}
+void freeTree(struct Node *root) {
+    if (root == NULL) {
+        return;
+    }
+    freeTree(root->left);
+    freeTree(root->right);
+    free(root);
+}
+int main() {
+    struct Node *root = NULL;
+    int values[7] = {50, 30, 70, 20, 40, 60, 80};
+    for (int i = 0; i < 7; i++) {
+        root = insert(root, values[i]);
+    }
+    inOrder(root);
+    printf("\nheight %d, has 60: %d, has 65: %d\n", height(root), contains(root, 60), contains(root, 65));
+    freeTree(root);
+    return 0;
+}`),
+    ).toBe("20 30 40 50 60 70 80 \nheight 3, has 60: 1, has 65: 0\n");
+  });
+});
+
 describe("struct mistakes give clear errors", () => {
   it("names a member the struct does not have", () => {
     expect(
