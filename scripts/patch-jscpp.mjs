@@ -264,6 +264,63 @@ const PATCHES = [
     `k=e[d++],"p"===b[1]?h.push(m=function(r,v){var t=v&&v.v&&v.v.target,base,size;if(null==t||"object"!=typeof t)return"(nil)";r.__addr||(r.__addr=new WeakMap,r.__nextAddr=4096);base=r.__addr.get(t);void 0===base&&(base=r.__nextAddr,r.__addr.set(t,base),r.__nextAddr+=1024);size="array"===v.t.ptrType&&v.t.eleType&&"char"===v.t.eleType.name?1:"array"===v.t.ptrType&&v.t.eleType&&"double"===v.t.eleType.name?8:4;return"0x"+(1879048192+base+("array"===v.t.ptrType?size*v.v.position:0)).toString(16)}(j,k)):(a=j.cast(l,k),j.isStringType(a.t)?h.push(m=j.getStringFromCharArray(a)):h.push(m=a.v))`,
   ],
   ["printf %p: format the address as text", 1, `e=g.apply(null,[a].concat(i.call(d)))`, `e=g.apply(null,[a.replace(/%p/g,"%s")].concat(i.call(d)))`],
+  // Dynamic memory. Upstream JSCPP has no malloc, calloc, realloc or free.
+  // malloc(n) hands out an untyped block that remembers its size in bytes;
+  // the first time it is assigned or cast to a pointer type (int *v =
+  // malloc(...)), it becomes n / sizeof(int) elements of that type, so v[i],
+  // *(v + i) and p++ work as on any array. free marks the block as given
+  // back: using it afterwards, freeing it twice, or freeing an address that
+  // did not come from malloc stops with a clear error, as the memory-bug
+  // lessons need. Unlike real C, new memory always starts at 0.
+  [
+    "heap: helpers on the runtime (allocate, type a block, free, resize)",
+    1,
+    `d.prototype.makeArrayPointerValue=function(a,b){return{target:a,position:b}},`,
+    `d.prototype.makeArrayPointerValue=function(a,b){return{target:a,position:b}},` +
+      `d.prototype.__heapAlloc=function(n){var t=[];return n=Math.max(0,Math.floor(Number(n)||0)),t.__heapBlock=!0,t.__bytes=n,this.val(this.arrayPointerType(this.voidTypeLiteral,0),this.makeArrayPointerValue(t,0))},` +
+      `d.prototype.__elemSize=function(t){var l="primitive"===t.type&&this.config.limits[t.name];return l&&l.bytes?l.bytes:"primitive"===t.type&&/double/.test(t.name)?8:4},` +
+      `d.prototype.__heapAdopt=function(t,b){var k=b.v.target,s=this.__elemSize(t),n=Math.floor(k.__bytes/s),i;for(i=0;i<n;i++)k.push(this.defaultValue(t,!0));return k.__adoptedAs=t,this.val(this.arrayPointerType(t,n),this.makeArrayPointerValue(k,b.v.position))},` +
+      `d.prototype.__heapFree=function(p){var t=p&&p.v&&p.v.target;if(null==t)return;if(!Array.isArray(t)||!t.__heapBlock)return this.raiseException("bad free: free() was given an address that did not come from malloc, calloc or realloc");if(t.__freed)return this.raiseException("double free: this memory was already given back with free()");if(0!==p.v.position)return this.raiseException("bad free: free() must be given the address malloc returned, not one moved along from it");t.__freed=!0},` +
+      `d.prototype.__heapRealloc=function(p,n){var t=p&&p.v&&p.v.target,r,k,e,s,c,i;if(null==t)return this.__heapAlloc(n);if(!Array.isArray(t)||!t.__heapBlock)return this.raiseException("bad realloc: realloc() was given an address that did not come from malloc, calloc or realloc");if(t.__freed)return this.raiseException("use after free: this memory was already given back with free(), so it must not be used any more");if(r=this.__heapAlloc(n),!t.__adoptedAs)return t.__freed=!0,r;for(e=t.__adoptedAs,k=r.v.target,s=this.__elemSize(e),c=Math.floor(k.__bytes/s),i=0;i<c;i++)k.push(i<t.length?this.val(e,t[i].v,!0):this.defaultValue(e,!0));return k.__adoptedAs=e,t.__freed=!0,this.val(this.arrayPointerType(e,c),this.makeArrayPointerValue(k,0))},`,
+  ],
+  [
+    "heap: malloc, calloc, realloc and free in <stdlib.h>",
+    1,
+    `rt.scope[0].NULL=rt.nullPointer,`,
+    `rt.scope[0].NULL=rt.nullPointer,` +
+      `rt.regFunc(function(r,t,s){return r.__heapAlloc(s.v)},"global","malloc",[rt.unsignedintTypeLiteral],rt.voidPointerType),` +
+      `rt.regFunc(function(r,t,n,s){return r.__heapAlloc(n.v*s.v)},"global","calloc",[rt.unsignedintTypeLiteral,rt.unsignedintTypeLiteral],rt.voidPointerType),` +
+      `rt.regFunc(function(r,t,p,s){return r.__heapRealloc(p,s.v)},"global","realloc",[rt.voidPointerType,rt.unsignedintTypeLiteral],rt.voidPointerType),` +
+      `rt.regFunc(function(r,t,p){r.__heapFree(p)},"global","free",[rt.voidPointerType],rt.voidTypeLiteral),`,
+  ],
+  [
+    "heap: a block from malloc takes the type it is first assigned to; any array pointer converts to void *",
+    1,
+    `if(this.isTypeEqualTo(a.targetType,b.t.eleType))return b;this.raiseException(this.makeTypeString(a.targetType)+" is not equal to array element type "+this.makeTypeString(b.t.eleType))`,
+    `if(this.isTypeEqualTo(a.targetType,b.t.eleType))return b;if(b.v.target&&b.v.target.__heapBlock&&!b.v.target.__adoptedAs)return this.__heapAdopt(a.targetType,b);if("primitive"===a.targetType.type&&"void"===a.targetType.name)return b;this.raiseException(this.makeTypeString(a.targetType)+" is not equal to array element type "+this.makeTypeString(b.t.eleType))`,
+  ],
+  // A pointer variable that has been given an array becomes an array
+  // pointer, so `p = NULL;` after free(p) went through the plain-pointer to
+  // array-pointer branch, which refused void * and crashed in its message.
+  [
+    "pointer casts: NULL (void *) can be assigned to a pointer that held an array",
+    1,
+    `else if(this.isArrayType(a)){if(this.isTypeEqualTo(a.eleType,b.t.targetType))return b;this.raiseException("array element type "+this.makeTypeString(a.eleType)+" is not equal to "+this.makeTypeString(b.t.eleType))}`,
+    `else if(this.isArrayType(a)){if(this.isTypeEqualTo(a.eleType,b.t.targetType))return b;if(b.t.targetType&&"primitive"===b.t.targetType.type&&"void"===b.t.targetType.name)return b;this.raiseException("array element type "+this.makeTypeString(a.eleType)+" is not equal to "+this.makeTypeString(b.t.targetType||b.t))}`,
+  ],
+  // A cast's type name ignored its pointer part, so (int *) x cast to int.
+  [
+    "casts: (int *) and other pointer type names keep their *",
+    1,
+    `TypeName:function(b,c,d){var e,f,g,h,i;for(a=b.rt,i=[],h=c.base,f=0,g=h.length;f<g;f++)e=h[f],"const"!==e&&i.push(e);return a.simpleType(i)}`,
+    `TypeName:function(b,c,d){var e,f,g,h,i;for(a=b.rt,i=[],h=c.base,f=0,g=h.length;f<g;f++)e=h[f],"const"!==e&&i.push(e);return b.buildRecursivePointerType(c.extra&&c.extra.Pointer,a.simpleType(i),0)}`,
+  ],
+  [
+    "heap: using memory after free() stops with a clear error",
+    1,
+    `(d=b.v.target,b.v.position>=d.length?`,
+    `(d=b.v.target,d.__freed&&a.raiseException("use after free: this memory was already given back with free(), so it must not be used any more"),b.v.position>=d.length?`,
+  ],
   // A prototype (`int square(int x);`) and the later definition are both
   // registered. A call whose argument types need converting, such as
   // square(7) where 7 is unsigned, finds both, and they are the same
