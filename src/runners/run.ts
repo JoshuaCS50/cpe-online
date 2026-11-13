@@ -36,7 +36,7 @@ export function runProgram(options: RunOptions): Promise<DebugResult> {
     case "cpp":
       return runCInWorker({ code, consoleIO, signal, files, onFiles, onError: (text) => onError({ language, text }) });
     case "python":
-      return runPythonInWorker({ code, consoleIO, signal, onError: (text) => onError({ language, text }) });
+      return runPythonInWorker({ code, consoleIO, signal, files, onFiles, onError: (text) => onError({ language, text }) });
     case "matlab":
       return runMatlabInWorker({
         code,

@@ -326,8 +326,8 @@ export function compileLesson(source: string, file: string): Lesson {
       problems.push(`hints (${frontmatter.hints.length}) and hintsKid (${frontmatter.hintsKid.length}) must have the same number of entries`);
     }
     for (const check of frontmatter.checks) {
-      if (check.type === "file-equals" && frontmatter.language !== "c" && frontmatter.language !== "cpp") {
-        problems.push("check file-equals only works in C and C++ lessons, whose programs can write files here");
+      if (check.type === "file-equals" && frontmatter.language === "matlab") {
+        problems.push("check file-equals only works in C, C++ and Python lessons; MATLAB programs cannot write files here yet");
       }
       if (check.type !== "stdout-regex" && check.type !== "code-contains") continue;
       try {

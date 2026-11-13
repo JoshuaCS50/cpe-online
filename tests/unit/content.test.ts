@@ -10,6 +10,7 @@ import type { DataFile, Lesson } from "../../src/content/schema";
 import { allPassed, runChecks } from "../../src/learn/checker";
 import type { ProgramResult, ProgramRunner } from "../../src/learn/checker";
 import { escapeSpacesInStringLiterals } from "../../src/runners/c/prepare-source";
+import { workFolderSetup } from "../../src/runners/python/work-folder";
 import { StepLimitError, runCWithLimit } from "../helpers/jscpp";
 
 const HEADER = `---
@@ -116,7 +117,7 @@ describe("compileLesson", () => {
     ["a data file without a name", `${HEADER}---${BODY}\n\`\`\`text {role=file}\nx\n\`\`\`\n`, /needs file=<name>/],
     ["a data file name with a folder", `${HEADER}---${BODY}\n\`\`\`text {role=file file=data/x.txt}\nx\n\`\`\`\n`, /needs file=<name>/],
     ["two data files with one name", `${HEADER}---${BODY}\n\`\`\`text {role=file file=x.txt}\na\n\`\`\`\n\n\`\`\`text {role=file file=x.txt}\nb\n\`\`\`\n`, /second data file called x.txt/],
-    ["a file check in a Python lesson", `${HEADER.replace("language: c", "language: python")}checks:\n  - {type: file-equals, file: out.txt, expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```python")}`, /file-equals only works in C/],
+    ["a file check in a MATLAB lesson", `${HEADER.replace("language: c", "language: matlab")}checks:\n  - {type: file-equals, file: out.txt, expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```matlab")}`, /file-equals only works in C, C\+\+ and Python/],
     ["no kid block", `${HEADER}---\nNormal text.\n`, /no "::: kid" block/],
     ["no explanation", `${HEADER}---\n::: kid\nHi there.\n:::\n`, /no explanation/],
     ["a long kid sentence", `${HEADER}---\nText.\n\n::: kid\nThis sentence just keeps on going and going with far too many words in it.\n:::\n`, /sentence has 15 words/],
@@ -215,25 +216,40 @@ const cRunner =
 const runC = cRunner();
 
 let pyodide: Awaited<ReturnType<typeof loadPyodide>>;
-const runPython: ProgramRunner = async (code, stdin): Promise<ProgramResult> => {
-  const lines = [...stdin];
-  let stdout = "";
-  pyodide.setStdin({ stdin: () => lines.shift() ?? null });
-  pyodide.setStdout({ batched: (text: string) => void (stdout += text + "\n") });
-  const namespace = pyodide.globals.get("dict")();
-  try {
-    await pyodide.runPythonAsync(code, { globals: namespace, filename: "main.py" });
-    return { stdout, ok: true };
-  } catch (error) {
-    return { stdout, ok: false, error: (error as Error).message };
-  } finally {
+const PY_WORK = "/tmp/lesson-work";
+
+// Mirrors the browser worker: a fresh working folder holding the lesson's
+// files, and every file read back after the program's names are dropped.
+const pythonRunner =
+  (dataFiles: readonly DataFile[] = []): ProgramRunner =>
+  async (code, stdin): Promise<ProgramResult> => {
+    const lines = [...stdin];
+    let stdout = "";
+    const fs = pyodide.FS;
+    fs.mkdirTree(PY_WORK);
+    const plain = (): string[] => (fs.readdir(PY_WORK) as string[]).filter((name) => name !== "." && name !== ".." && fs.isFile(fs.stat(`${PY_WORK}/${name}`).mode));
+    for (const name of plain()) fs.unlink(`${PY_WORK}/${name}`);
+    for (const file of dataFiles) fs.writeFile(`${PY_WORK}/${file.name}`, file.text);
+    pyodide.runPython(workFolderSetup(PY_WORK));
+    pyodide.setStdin({ stdin: () => lines.shift() ?? null });
+    pyodide.setStdout({ batched: (text: string) => void (stdout += text + "\n") });
+    const namespace = pyodide.globals.get("dict")();
+    let result: ProgramResult;
+    try {
+      await pyodide.runPythonAsync(code, { globals: namespace, filename: "main.py" });
+      result = { stdout, ok: true };
+    } catch (error) {
+      result = { stdout, ok: false, error: (error as Error).message };
+    }
     namespace.destroy();
-  }
-};
+    pyodide.runPython("import gc\ngc.collect()");
+    const files = Object.fromEntries(plain().map((name) => [name, fs.readFile(`${PY_WORK}/${name}`, { encoding: "utf8" }) as string]));
+    return { ...result, files };
+  };
 
 function runnerFor(language: Lesson["language"], files: readonly DataFile[]): ProgramRunner | undefined {
   if (language === "c" || language === "cpp") return cRunner(files);
-  return language === "python" ? runPython : undefined;
+  return language === "python" ? pythonRunner(files) : undefined;
 }
 
 describe("step-limited C runner", () => {

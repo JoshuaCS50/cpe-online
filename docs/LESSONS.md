@@ -54,7 +54,7 @@ The same task in simple words.
 
 A code block without `{role=...}` stays in the text where it is written.
 
-A C lesson can give its programs data files to open with `fopen`. Each one is a block with `role=file` and a name made of letters, digits, dots, dashes and underscores:
+A C or Python lesson can give its programs data files to open with `fopen` or `open` (a `.py` data file can also be imported as a module). Each one is a block with `role=file` and a name made of letters, digits, dots, dashes and underscores:
 
 ````markdown
 ```text {role=file file=readings.txt}
@@ -64,6 +64,8 @@ A C lesson can give its programs data files to open with `fopen`. Each one is a 
 ````
 
 The file is shown in the explanation under its name and again above the editor on the Example and Try tabs. Every run of the lesson (example, Run, every check) starts from a fresh copy, and "Open in the editor" adds it to the explorer unless a file of that name is already there. A lesson may have several data files.
+
+A hint that contains a colon followed by a space (`for i in range(n): ...`, `f"Average: {x}"`) must be quoted, or YAML reads it as a key and value; wrap it in single quotes.
 
 Hints are plain text, except that text between backticks is shown as code: `` 'Type this: `n++;`' ``. In kid hints, code in backticks counts as one word, which keeps a long line of code within the 12-word rule.
 
@@ -77,7 +79,7 @@ Hints are plain text, except that text between backticks is shown as code: `` 'T
 | `io-cases` | every case prints its `expect` | `cases: [{stdin: [...], expect: "..."}]` |
 | `stdout-regex` | the output matches `pattern` | `pattern`, `stdin`, `message` (shown on failure) |
 | `code-contains` | the code (comments removed) matches `pattern` | `pattern`, `message` |
-| `file-equals` | after the run, the file the program wrote holds `expect` (C and C++ only) | `file`, `expect`, `stdin` (optional) |
+| `file-equals` | after the run, the file the program wrote holds `expect` (C, C++ and Python; not MATLAB) | `file`, `expect`, `stdin` (optional) |
 
 Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`.
 

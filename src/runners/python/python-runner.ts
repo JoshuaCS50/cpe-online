@@ -18,6 +18,10 @@ export interface PythonRunOptions {
    * the error itself and leaves the explanation to the caller.
    */
   onError?: (text: string) => void;
+  /** Files the program may open with open(), name -> text. */
+  files?: Record<string, string>;
+  /** Receives every file after a run that created or changed any. */
+  onFiles?: (files: Record<string, string>) => void;
 }
 
 export interface PythonDebugOptions extends PythonRunOptions {
@@ -146,6 +150,9 @@ function execute(
           );
         }
         break;
+      case "files":
+        options.onFiles?.(message.files);
+        break;
       case "done":
         consoleIO.writeInfo("\n[program finished]\n");
         finish({ ok: true, exitCode: 0 });
@@ -196,6 +203,7 @@ function execute(
       stdin: consoleIO.drainBuffer(),
       input,
       interrupt: interruptBuffer,
+      files: options.files,
       debug,
     };
     active.postMessage(request);
