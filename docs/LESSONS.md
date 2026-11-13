@@ -91,7 +91,7 @@ Not checked, but expected: one idea per sentence, a concrete picture (a box, a h
 The C interpreter is stricter than a desktop compiler in places. Known so far:
 
 - Write `int main()`, not `int main(void)`.
-- Avoid `scanf("%c", ...)`.
+- `scanf` into an array element (`&values[i]`), `scanf("%c", ...)`, `scanf("%lf", ...)` and `printf("%lf"/"%ld", ...)` all failed upstream; patches in `scripts/patch-jscpp.mjs` fix them, guarded by `tests/unit/jscpp-scanf-arrays.test.ts` and `tests/unit/jscpp-interactive-input.test.ts`.
 - There is no `<stdbool.h>`, so no `bool`, `true` or `false` in C lessons. Use 1 and 0.
 - Recursion is shallow and slow: every C call uses several JavaScript stack frames, so a few hundred levels already take over a second and around a thousand overflow the stack. Keep recursion in lessons to a few dozen levels. Endless recursion stops with "Maximum call stack size exceeded", which the error catalog explains (`c.recursion-too-deep`).
 - It is slow: roughly 15,000 loop repetitions a second. Keep loops in lessons under about 1,000 repetitions. The tests stop a C program after a million interpreter steps and report it as a loop that never ends, so a starter that loops forever fails the build instead of hanging it.

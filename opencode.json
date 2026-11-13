@@ -8,11 +8,21 @@
     "typeui": { "enabled": false },
     "nothumansearch": { "enabled": false }
   },
+  "tools": {
+    "execute": false,
+    "repo_clone": false,
+    "repo_overview": false,
+    "skill": false
+  },
   "permission": {
     "edit": "allow",
     "webfetch": "deny",
     "websearch": "deny",
     "external_directory": "deny",
+    "execute": "deny",
+    "repo_clone": "deny",
+    "repo_overview": "deny",
+    "skill": "deny",
     "bash": {
       "*": "deny",
       "npm test*": "allow",

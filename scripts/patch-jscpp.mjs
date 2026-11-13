@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Builds public/vendor/JSCPP.es5.min.js from the untouched upstream bundle in
-// vendor-src/, with three behaviour changes: input is pulled on demand,
-// comparisons give 1 or 0, and a function prototype followed by its
-// definition counts as one function.
+// vendor-src/, with these behaviour changes: input is pulled on demand;
+// comparisons give 1 or 0; a function prototype followed by its definition
+// counts as one function; scanf can fill an array element and read %lf.
 //
 // Upstream reads all of stdin once, when <stdio.h> or <iostream> is loaded, so
 // a program can never ask for more input while it runs. The patched build
@@ -74,6 +74,42 @@ const PATCHES = [
   // Comparisons and && || ! produce JavaScript booleans inside the
   // interpreter. In C they are the int values 1 and 0, so printf("%d", a < b)
   // must print 1, not stop with "format argument 'true' not an integer".
+  // scanf stores through a pointer. For a pointer into an array, upstream
+  // always treats the target as a text buffer and copies characters from
+  // position 0, so scanf("%d", &values[i]) fails with "Memory overflow".
+  // A number now goes into the one element the pointer names; text (%s into
+  // a char array) keeps the upstream path.
+  // %c hands the store one character as text. char counts as a number type,
+  // so upstream tried to turn "+" into a number and failed with "Memory
+  // overflow". Text stored into a number type is now its character code.
+  [
+    "scanf %c into a char: store the character's code",
+    1,
+    `case"normal":return b.isNumericType(a.t.targetType)?(f=b.val(a.t.targetType,c,!0),a.v.target.v=f.v):`,
+    `case"normal":return b.isNumericType(a.t.targetType)?(f=b.val(a.t.targetType,"string"==typeof c?c.charCodeAt(0):c,!0),a.v.target.v=f.v):`,
+  ],
+  [
+    "scanf into an array element: scanf(\"%d\", &values[i]) stores values[i]",
+    1,
+    `case"array":if(i=b.makeCharArrayFromString(c),i.v.target.length>a.v.target.length)`,
+    `case"array":if("string"!=typeof c||1===c.length&&a.v.position>0){if(a.v.position<0||a.v.position>=a.v.target.length)return b.raiseException("index out of bound "+a.v.position+" >= "+a.v.target.length);return f=b.val(a.t.eleType,"string"==typeof c?c.charCodeAt(0):c,!0),a.v.target[a.v.position].v=f.v}if(i=b.makeCharArrayFromString(c),i.v.target.length>a.v.target.length)`,
+  ],
+  // printf collects its arguments with its own pattern, which has no length
+  // modifiers, so printf("%lf", d) and printf("%ld", n) found no argument
+  // and stopped with "insufficient arguments". The formatter itself already
+  // accepts h, l and L.
+  [
+    "printf %lf %ld %hd ...: length modifiers are allowed",
+    1,
+    String.raw`(?:\.(?:[0-9]+|\*))?([diuoxXfFeEgGaAcspn])/g`,
+    String.raw`(?:\.(?:[0-9]+|\*))?(?:hh|h|ll|l|L)?([diuoxXfFeEgGaAcspn])/g`,
+  ],
+  [
+    "scanf %lf (and %e %g %le %lg): read a decimal number, as %f does",
+    1,
+    `case"%f":f=o(c,b);break;default:`,
+    `case"%f":case"%lf":case"%e":case"%le":case"%g":case"%lg":f=o(c,b);break;default:`,
+  ],
   // A prototype (`int square(int x);`) and the later definition are both
   // registered. A call whose argument types need converting, such as
   // square(7) where 7 is unsigned, finds both, and they are the same
@@ -115,6 +151,6 @@ for (const [description, expected, search, replacement] of PATCHES) {
 }
 
 const banner =
-  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work. */\n";
+  "/* JSCPP (MIT, github.com/felixhao28/JSCPP), patched by scripts/patch-jscpp.mjs: stdin is pulled on demand; comparisons are 1 or 0; prototypes work; scanf fills array elements and reads %lf. */\n";
 writeFileSync(TARGET, banner + text);
 console.log(`Wrote ${TARGET} (${PATCHES.length} patches applied).`);
