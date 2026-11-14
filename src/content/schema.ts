@@ -5,6 +5,10 @@
 // out of the shipped bundle.
 
 import { z } from "zod";
+import { BOARD_IDS } from "../runners/arduino/profiles";
+import type { BoardId } from "../runners/arduino/profiles";
+import { CIRCUIT_PARTS, LED_COLOURS } from "./circuit";
+import type { Circuit } from "./circuit";
 
 export const TRACK_IDS = ["core", "embedded", "plc", "control"] as const;
 export type TrackId = (typeof TRACK_IDS)[number];
@@ -18,6 +22,22 @@ const stdin = z.array(z.string()).default([]);
 const inputs = z.array(z.string()).optional();
 /** Arduino lessons: how much board time to run, in ms. */
 const ms = z.number().int().positive().max(60_000).optional();
+
+/** A pin as an author writes it: 13, "A0", "GPIO 23". */
+const pinRef = z.union([z.number().int().nonnegative(), z.string().min(1)]);
+
+/** Arduino lessons: one part of the circuit, as written in the header. */
+const circuitPartSchema = z.strictObject({
+  part: z.enum(CIRCUIT_PARTS),
+  pin: pinRef.optional(),
+  /** Several pins: RGB LED [red, green, blue], ultrasonic [trig, echo], stepper [IN1, IN2, IN3, IN4]. */
+  pins: z.array(pinRef).min(2).max(4).optional(),
+  colour: z.enum(LED_COLOURS).optional(),
+  wiring: z.enum(["pull-up", "pull-down"]).optional(),
+  ohms: z.number().int().positive().optional(),
+  label: z.string().min(1).optional(),
+});
+export type CircuitPartInput = z.infer<typeof circuitPartSchema>;
 
 /** How "Check my answer" decides whether a program is right. */
 export const checkSchema = z.discriminatedUnion("type", [
@@ -67,6 +87,10 @@ export const frontmatterSchema = z
     /** Mini lessons only: the symbol the page is about, for example "printf". */
     symbol: z.string().min(1).optional(),
     language: z.enum(LESSON_LANGUAGES),
+    /** Arduino lessons: the board the sketch runs on (default: the Uno). */
+    board: z.enum(BOARD_IDS).optional(),
+    /** Arduino lessons: the parts on the breadboard and their pins. */
+    circuit: z.array(circuitPartSchema).min(1).optional(),
     concepts: z.array(z.string().min(1)).default([]),
     /** Ids of lessons to do first. */
     prereqs: z.array(contentId).default([]),
@@ -126,6 +150,8 @@ export interface LessonMeta {
   minutes: number;
   hasExample: boolean;
   hasTryIt: boolean;
+  /** Arduino lessons: the board and the parts of the circuit, as glossary ids ("board-uno", "led"). */
+  parts?: string[];
 }
 
 /** A whole lesson, loaded when it is opened. */
@@ -138,9 +164,14 @@ export interface Lesson extends LessonMeta {
   tryIt?: TryIt;
   /** Files every run of this lesson can open (example, Run and Check). */
   files: DataFile[];
+  /** Arduino lessons: the board, when it is not the Uno. */
+  board?: BoardId;
+  /** Arduino lessons: the circuit on the breadboard. */
+  circuit?: Circuit;
 }
 
 export function metaOf(lesson: Lesson): LessonMeta {
   const { id, kind, track, unit, order, title, titleKid, symbol, language, concepts, prereqs, minutes, hasExample, hasTryIt } = lesson;
-  return { id, kind, track, unit, order, title, titleKid, ...(symbol ? { symbol } : {}), language, concepts, prereqs, minutes, hasExample, hasTryIt };
+  const parts = language === "arduino" ? [`board-${lesson.board ?? "uno"}`, ...new Set((lesson.circuit?.parts ?? []).map((part) => part.part))] : [];
+  return { id, kind, track, unit, order, title, titleKid, ...(symbol ? { symbol } : {}), language, concepts, prereqs, minutes, hasExample, hasTryIt, ...(parts.length ? { parts } : {}) };
 }

@@ -8,6 +8,9 @@ import type { Language } from "../storage/types";
 import type { ConsoleIO } from "../terminal/console";
 import { runCInWorker } from "./c/c-runner";
 import { parseInput } from "./arduino/board";
+import type { BoardEvent, BoardReport, PinReads } from "./arduino/board";
+import { profileOf } from "./arduino/profiles";
+import type { BoardId } from "./arduino/profiles";
 import { DEFAULT_RUN_MS } from "./arduino/sketch";
 import { runCppInWorker } from "./cpp/cpp-runner";
 import { runMatlabInWorker } from "./matlab/matlab-runner";
@@ -26,9 +29,12 @@ export interface RunOptions {
   /** Receives every file after a C run that created or changed any. */
   onFiles?: (files: Record<string, string>) => void;
   /** Arduino sketches: board time to run (ms) and inputs over time, such as "2 HIGH at 1200". */
-  sim?: { runMs?: number; inputs?: readonly string[] };
-  /** Receives an Arduino sketch's pin timeline and board warnings. */
-  onBoard?: (timeline: string[], warnings: string[]) => void;
+  /** `live`: run in real time, inputs from the page through this channel (arduino/live.ts). */
+  sim?: { runMs?: number; inputs?: readonly string[]; board?: BoardId; live?: SharedArrayBuffer };
+  /** Live sketches: changes as they happen. */
+  onLive?: (events: BoardEvent[], t: number, modes: number[], reads: PinReads) => void;
+  /** Receives an Arduino sketch's pin changes and board warnings. */
+  onBoard?: (report: BoardReport) => void;
 }
 
 /** Languages whose programs the Stop button can end. */
@@ -37,7 +43,7 @@ export function canStop(language: string | undefined): boolean {
 }
 
 export function runProgram(options: RunOptions): Promise<DebugResult> {
-  const { language, code, fileName, consoleIO, signal, onError, files, onFiles, sim, onBoard } = options;
+  const { language, code, fileName, consoleIO, signal, onError, files, onFiles, sim, onBoard, onLive } = options;
   switch (language) {
     case "cpp":
       // Real C++ (clang in WebAssembly). Files are not supported here yet.
@@ -48,8 +54,14 @@ export function runProgram(options: RunOptions): Promise<DebugResult> {
         code,
         consoleIO,
         signal,
-        sketch: { runMs: sim?.runMs ?? DEFAULT_RUN_MS, inputs: (sim?.inputs ?? []).map(parseInput) },
+        sketch: {
+          runMs: sim?.runMs ?? DEFAULT_RUN_MS,
+          inputs: (sim?.inputs ?? []).map((input) => parseInput(input, profileOf(sim?.board))),
+          board: sim?.board,
+          ...(sim?.live ? { live: sim.live } : {}),
+        },
         onBoard,
+        onLive,
         onError: (text) => onError({ language, text }),
       });
     case "c":

@@ -38,6 +38,9 @@ import { Marked } from "marked";
 import { parse as parseYaml } from "yaml";
 
 import { parseInput } from "../runners/arduino/board";
+import { profileOf } from "../runners/arduino/profiles";
+import { resolveCircuitParts } from "./circuit";
+import type { Circuit } from "./circuit";
 import { frontmatterSchema } from "./schema";
 import type { CodeSample, DataFile, Frontmatter, Lesson, LessonLanguage } from "./schema";
 import { findTrack, findUnit } from "./tracks";
@@ -274,6 +277,18 @@ function sampleOf(
 }
 
 /** Compiles one lesson file. Throws a ContentError listing everything wrong with it. */
+/** The header's circuit with its pins checked against the board and turned into numbers. */
+function resolveCircuit(frontmatter: Frontmatter, problems: string[]): Circuit | undefined {
+  if (!frontmatter.circuit) return undefined;
+  if (frontmatter.language !== "arduino") {
+    problems.push("circuit only works in Arduino lessons");
+    return undefined;
+  }
+  const result = resolveCircuitParts(frontmatter.circuit, frontmatter.board ?? "uno");
+  problems.push(...result.problems.map((problem) => `circuit: ${problem}`));
+  return result.circuit;
+}
+
 export function compileLesson(source: string, file: string): Lesson {
   const normalized = source.replace(/\r\n?/g, "\n");
   // Some editors put an invisible byte-order mark first; the header check must not trip on it.
@@ -328,6 +343,7 @@ export function compileLesson(source: string, file: string): Lesson {
     if (frontmatter.hints.length !== frontmatter.hintsKid.length) {
       problems.push(`hints (${frontmatter.hints.length}) and hintsKid (${frontmatter.hintsKid.length}) must have the same number of entries`);
     }
+    if (frontmatter.board && frontmatter.language !== "arduino") problems.push("board only works in Arduino lessons");
     for (const check of frontmatter.checks) {
       if (check.type === "file-equals" && (frontmatter.language === "matlab" || frontmatter.language === "cpp" || frontmatter.language === "arduino")) {
         problems.push("check file-equals only works in C and Python lessons; C++ and MATLAB programs cannot write files here yet");
@@ -338,7 +354,7 @@ export function compileLesson(source: string, file: string): Lesson {
       if ((check.type === "pins" || check.type === "stdout-equals") && check.inputs) {
         for (const input of check.inputs) {
           try {
-            parseInput(input);
+            parseInput(input, profileOf(frontmatter.board));
           } catch (error) {
             problems.push(`check ${check.type}: ${(error as Error).message}`);
           }
@@ -366,6 +382,8 @@ export function compileLesson(source: string, file: string): Lesson {
     problems.push('hints are only used by "Try it yourself", which this lesson does not have');
   }
 
+  const circuit = resolveCircuit(frontmatter, problems);
+
   if (problems.length > 0) throw new ContentError(file, problems);
 
   return {
@@ -389,6 +407,8 @@ export function compileLesson(source: string, file: string): Lesson {
     ...(example ? { example } : {}),
     ...(tryIt ? { tryIt } : {}),
     files,
+    ...(frontmatter.board ? { board: frontmatter.board } : {}),
+    ...(circuit ? { circuit } : {}),
   };
 }
 

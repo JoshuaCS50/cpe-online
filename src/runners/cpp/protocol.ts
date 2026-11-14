@@ -1,6 +1,7 @@
 // Messages between the page and the C++ worker.
 
-import type { ScheduledInput } from "../arduino/board";
+import type { BoardEvent, BoardReport, PinReads, ScheduledInput } from "../arduino/board";
+import type { BoardId } from "../arduino/profiles";
 
 /** The vendored compiler's manifest, written by scripts/vendor-clang.mjs. */
 export interface ClangManifest {
@@ -22,12 +23,15 @@ export interface CppRunRequest {
   /** Channel the worker sleeps on while the user types (see input-channel.ts). */
   input: SharedArrayBuffer | null;
   /** Present for an Arduino sketch: how long to run the virtual board, and inputs over time. */
-  sketch?: { runMs: number; inputs: ScheduledInput[] };
+  /** `live`: run in real time with inputs from the page (see arduino/live.ts). */
+  sketch?: { runMs: number; inputs: ScheduledInput[]; board?: BoardId; live?: SharedArrayBuffer };
 }
 
 export type CppWorkerMessage =
   /** An Arduino sketch finished: pin changes over time and warnings about the board. */
-  | { type: "board"; timeline: string[]; warnings: string[]; runMs: number }
+  | { type: "board"; report: BoardReport }
+  /** A live sketch's changes since the last message, the board time, and the pin modes. */
+  | { type: "live"; events: BoardEvent[]; t: number; modes: number[]; reads: PinReads }
   /** The compiler is downloading for the first time: bytes so far of the total. */
   | { type: "loading"; loaded: number; total: number }
   | { type: "compiling" }

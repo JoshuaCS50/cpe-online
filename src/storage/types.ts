@@ -41,6 +41,8 @@ export interface Settings {
   dismissedInstallBanner: boolean;
   /** Explanations use the hand-written text for young readers. Applies to lessons and error cards. */
   kidMode: boolean;
+  /** Where Code mode's output panel (terminal, problems, board) sits: under the editor or beside it. */
+  panelSide: "bottom" | "right";
 }
 
 /** Everything a store holds, for atomic imports. */

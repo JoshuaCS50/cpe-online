@@ -1,0 +1,332 @@
+/* The side windows (Extra info, circuit editor) and circuit tables, used in both modes.
+   Copied from learn.css so Code mode has them before Learn mode is opened. */
+
+/* ───── Extra info window ───── */
+
+.lesson-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+}
+
+.lesson-title-row h1 {
+  flex: 1 1 20rem;
+  margin: 0;
+}
+
+.extra-button {
+  flex: none;
+}
+
+.extra-info {
+  width: min(560px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-left: 1.5px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.extra-info::backdrop {
+  background: rgb(5 10 20 / 0.45);
+}
+
+.extra-info[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.extra-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-4) var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.extra-head h2 {
+  margin: 0;
+  font-size: var(--fs-xl);
+}
+
+.extra-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--s-4) var(--s-5);
+}
+
+.extra-body > h2 {
+  margin: var(--s-5) 0 var(--s-2);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.extra-card {
+  margin: 0 0 var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+
+.extra-card h3 {
+  margin: 0 0 var(--s-1);
+  font-size: var(--fs-md);
+}
+
+.extra-card p {
+  margin: var(--s-1) 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.extra-code {
+  margin: var(--s-2) 0;
+  padding: var(--s-2);
+  overflow-x: auto;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  font-size: var(--fs-xs);
+}
+
+.extra-watch {
+  color: var(--warn);
+}
+
+.extra-missing {
+  color: var(--ink-dim);
+  font-size: var(--fs-sm);
+}
+
+/* Pinout drawing from the Fusion render: rings on the pins, leader lines, label chips. */
+.pinout-drawing {
+  min-width: 860px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.pinout-ring {
+  fill: none;
+  stroke: #f0c552;
+  stroke-width: 1.6;
+}
+
+.pinout-leader {
+  stroke: var(--ink-faint);
+  stroke-width: 1;
+}
+
+.pinout-chip text {
+  font: 700 10px ui-monospace, "JetBrains Mono", monospace;
+  letter-spacing: 0.02em;
+}
+
+.pinout-chip rect {
+  stroke: rgb(0 0 0 / 0.25);
+  stroke-width: 0.6;
+}
+
+/* Legend grouped by purpose. */
+.pinout-legend {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin: var(--s-3) 0;
+}
+
+.pinout-legend-group {
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+
+.pinout-legend-group h3 {
+  margin: 0 0 var(--s-2);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pinout-legend-group dl {
+  margin: 0;
+}
+
+.pinout-legend-group dt {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.pinout-legend-group dd {
+  margin: 2px 0 0;
+  color: var(--ink-dim);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+.pinout-sample {
+  display: inline-block;
+  min-width: 44px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font: 700 10px ui-monospace, monospace;
+  text-align: center;
+}
+
+
+/* ───── Circuit editor (Code mode) ───── */
+
+.circuit-editor .extra-body > h3,
+.circuit-editor-preview h3 {
+  margin: var(--s-4) 0 var(--s-2);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.circuit-editor-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s-2);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.circuit-editor-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.circuit-editor-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink-dim);
+  font-size: var(--fs-xs);
+}
+
+.circuit-editor-field input,
+.circuit-editor-field select,
+.circuit-editor-add {
+  min-height: 32px;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.circuit-editor-add {
+  margin-top: var(--s-2);
+}
+
+.circuit-editor-problems {
+  margin: var(--s-2) 0 0;
+  padding-left: 1.2em;
+  color: var(--err);
+  font-size: var(--fs-sm);
+}
+
+.circuit-editor-note,
+.circuit-editor-empty {
+  color: var(--ink-dim);
+  font-size: var(--fs-sm);
+}
+
+.circuit-editor-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+
+.circuit-parts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.circuit-parts li {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.circuit-count {
+  display: inline-block;
+  min-width: 2.2em;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.circuit-table,
+.board-page table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.circuit-table th,
+.circuit-table td,
+.board-page th,
+.board-page td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.circuit-table th,
+.board-page th {
+  color: var(--ink-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+
+.circuit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.circuit-table th,
+.circuit-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.circuit-table th {
+  color: var(--ink-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.circuit-pin {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  white-space: nowrap;
+}

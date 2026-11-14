@@ -1,6 +1,6 @@
 # Writing lessons
 
-A lesson is one Markdown file under `src/content/tracks/<track>/<unit>/`. The build turns it into a page in Learn mode. A lesson that breaks any rule below stops the build and fails `npm test`, so a broken lesson cannot ship.
+A lesson is one Markdown file at `src/content/tracks/<track>/<unit number>-<unit name>/<lesson number>-<lesson name>.md`, for example `embedded/b11-esp32-a-faster-connected-board/05-touch-pins.md`. The unit number is the header's `unit` with two digits (b11, a01), the lesson number is its `order` with two digits, so the folders read like a course; the build rejects a file that is not where its header says. `docs/COURSE.md` (the syllabus) and `docs/TOPICS.md` (topics A to Z) are written from the lessons by `npm test`. The build turns each lesson into a page in Learn mode. A lesson that breaks any rule below stops the build and fails `npm test`, so a broken lesson cannot ship.
 
 ## The file
 
@@ -82,7 +82,9 @@ Hints are plain text, except that text between backticks is shown as code: `` 'T
 | `file-equals` | after the run, the file the program wrote holds `expect` (C and Python; not C++ or MATLAB yet) | `file`, `expect`, `stdin` (optional) |
 | `pins` | Arduino only: the pin changes over board time are exactly `expect`, one per line, such as `500 ms: pin 13 LOW` | `expect`, `ms` (board time to run, default 10000), `inputs` (optional) |
 
-**Arduino lessons** (`language: arduino`, ` ```arduino ` blocks, file `sketch.ino`) run on the virtual Uno (`src/runners/arduino`). `inputs` schedules what the board's inputs read, from a time on: `"2 LOW at 500"` (a button on pin 2 pressed at 500 ms), `"A0 512 at 0"` (half the voltage on A0). Pins nobody drives read LOW, or HIGH with `INPUT_PULLUP`. Board time is virtual: `delay()` jumps the clock, a `loop()` that never waits takes 0.01 ms and each `millis()` call 0.001 ms. Timeline lines are `T ms: pin P HIGH|LOW`, `T ms: pin P PWM V`, `T ms: servo on pin P at A degrees`, `T ms: tone on pin P at F Hz`; a pin's line appears only when its value changes, and changes in the same millisecond are listed by pin number, so the order a sketch writes them in does not matter. Simulated button presses can include contact bounce (`"2 LOW at 100", "2 HIGH at 102", "2 LOW at 104"`), so a debounce lesson can check that bounces are not counted. There is no step debugger for sketches, and `Serial.read()` gets nothing yet.
+**Arduino lessons** (`language: arduino`, ` ```arduino ` blocks, file `sketch.ino`) run on the virtual Uno (`src/runners/arduino`). `inputs` schedules what the board's inputs read, from a time on: `"2 LOW at 500"` (a button on pin 2 pressed at 500 ms), `"A0 512 at 0"` (half the voltage on A0). Pins nobody drives read LOW, or HIGH with `INPUT_PULLUP`. Board time is virtual: `delay()` jumps the clock, a `loop()` that never waits takes 0.01 ms and each `millis()` call 0.001 ms. Timeline lines are `T ms: pin P HIGH|LOW`, `T ms: pin P PWM V`, `T ms: servo on pin P at A degrees`, `T ms: tone on pin P at F Hz`; a line appears only when that pin's value (level, PWM duty, servo angle or tone) changes, so a loop that writes the same angle every 100 ms gives one line, and changes in the same millisecond are listed by pin number, so the order a sketch writes them in does not matter. Simulated button presses can include contact bounce (`"2 LOW at 100", "2 HIGH at 102", "2 LOW at 104"`), so a debounce lesson can check that bounces are not counted. Serial text printed just before the run time ends is kept, so a check with `ms: 900` and a 500 ms loop sees two lines. The simulator's `int` is 32 bits, but a real Uno's is 16 (−32768 to 32767): a lesson can explain overflow, but no check can catch it, so solutions should use `long` or decimals where a real board would overflow. There is no step debugger for sketches, and `Serial.read()` gets nothing yet.
+
+**ESP32 lessons** add `board: esp32` to the header (Arduino lessons only; the default is `uno`). The sketch then runs on a virtual ESP32 DevKit: `LED_BUILTIN` is GPIO 2, `analogRead` gives 0 to 4095 on the ADC pins (inputs are given at 12 bits and scaled if the sketch calls `analogReadResolution`), `ledcAttach`/`ledcWrite`, `touchRead` (70 untouched unless an input says otherwise), `dacWrite` on GPIO 25/26 and `esp_deep_sleep_start` (with `esp_sleep_enable_timer_wakeup(us)` the board sleeps that long, turns its outputs off, then starts the program again with fresh memory, keeping only `RTC_DATA_ATTR` variables; `esp_sleep_get_wakeup_cause()` says why it woke; without a timer the run ends with a note) are there, and an Uno sketch that calls them fails to compile, as on a real Uno. Inputs and timelines use GPIO names: `"GPIO 4 LOW at 300"`, `"GPIO 34 2048 at 0"` (plain numbers and A0-A7 work too), and lines read `T ms: GPIO 2 HIGH`, `T ms: GPIO 18 PWM 512 of 1023` (the "of" part appears when the PWM resolution is not 8 bits) or `T ms: GPIO 25 DAC 128`. The simulator notes outputs on input-only pins (34 to 39), pull-ups those pins do not have, the flash pins (6 to 11), LEDC used before `ledcAttach`, and a frequency too fast for its resolution. The ESP32's `int` is 32 bits, the same as the simulator's.
 
 Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`. A check fails when the program stops with an error or runs too long; the exit code does not matter, so a program may print a message and `return 1` on bad input. `stdin: []` tests what happens when the input ends at once.
 
@@ -142,3 +144,21 @@ The C interpreter is stricter than a desktop compiler in places. Known so far:
 ## Adding a unit
 
 Units are listed in `src/content/tracks.ts` with a normal and a kid title. A lesson that names a unit not listed there fails the build.
+
+## Circuits, Extra info and live runs (Arduino lessons)
+
+**Circuit.** An Arduino lesson can list its parts and pins in the header:
+
+```yaml
+circuit:
+  - { part: led, pin: 12, colour: red, label: Stop }
+  - { part: button, pin: 2, wiring: pull-up }
+  - { part: knob, pin: A0 }
+  - { part: rgb-led, pins: [9, 10, 11] }
+```
+
+Parts: `led` (colour, ohms), `rgb-led` (pins: red, green, blue), `button` (wiring: pull-up or pull-down), `knob`, `ldr` (ohms of the fixed resistor), `fsr`, `temp-sensor`, `soil-sensor`, `ultrasonic` (pins: trig, echo), `servo`, `buzzer`, `motor`, `stepper` (pins: IN1 to IN4), `oled` (no pin: it takes the I²C pins), `touch-pad` (ESP32). In checks, an ultrasonic sensor's input is its echo pin and a distance in cm (`10 30 at 0`), and OLED frames appear in the timeline as `screen shows "line 1 / line 2"`. Pins are written as on the board (13, A0, GPIO 23) and checked: an output on an input-only pin, an RGB LED on a non-PWM Uno pin, a knob on a pin with no ADC or a pin used twice stops the build. The lesson then gets a **Circuit** tab (the circuit in 3D, what you need, a pin → part → purpose wiring table and specifications with the LED current worked out, all generated by `src/content/circuit.ts`), and its Try tab runs on that circuit. Write the circuit the way the sketch wires it.
+
+**Extra info.** Every lesson has an Extra info button that explains its `concepts` and, for circuits, its board and parts, from `src/content/glossary/`. Give each new concept an entry there: a test requires one for every concept of every lesson (`core-basics.ts`, `core-data.ts`, `cpp-python.ts`, `embedded.ts`; parts in `components.ts`).
+
+**Live runs.** With shared memory available, Run on a sketch lesson defaults to Live: the learner holds buttons, drags knobs and light sliders, and touches pads while the sketch runs in real time. Choosing a check in the inputs menu runs those inputs instead, in virtual time, exactly as Check does.

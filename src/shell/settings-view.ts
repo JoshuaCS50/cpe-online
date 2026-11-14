@@ -51,6 +51,18 @@ export function createSettingsView(host: HTMLElement, options: SettingsViewOptio
     themeGroup.append(option);
   }
 
+  // Where the output panel sits.
+  const sideGroup = el("div", { class: "segmented", role: "radiogroup", "aria-label": "Output panel" });
+  const sideOptions = (["bottom", "right"] as const).map((side) => {
+    const option = el("button", { type: "button", class: "segment", role: "radio", "aria-checked": String(settings.panelSide === side) }, [side === "bottom" ? "Under the editor" : "Beside the editor"]);
+    option.addEventListener("click", () => {
+      for (const other of sideOptions) other.setAttribute("aria-checked", String(other === option));
+      onChange({ panelSide: side });
+    });
+    sideGroup.append(option);
+    return option;
+  });
+
   // Font size.
   const sizeValue = el("output", { class: "field-value", for: "setting-font-size" }, [`${settings.fontSize} px`]);
   const size = el("input", {
@@ -83,6 +95,7 @@ export function createSettingsView(host: HTMLElement, options: SettingsViewOptio
   host.append(
     el("div", { class: "side-header" }, [el("span", { class: "side-title" }, ["Settings"])]),
     el("div", { class: "field" }, [el("span", { class: "field-label" }, ["Theme"]), themeGroup]),
+    el("div", { class: "field" }, [el("span", { class: "field-label" }, ["Output panel"]), sideGroup]),
     el("div", { class: "field" }, [
       el("div", { class: "field-row" }, [
         el("label", { class: "field-label", for: "setting-font-size" }, ["Code size"]),
@@ -103,6 +116,7 @@ export function createSettingsView(host: HTMLElement, options: SettingsViewOptio
     sync(next) {
       const box = kidToggle.querySelector<HTMLInputElement>("input");
       if (box) box.checked = next.kidMode;
+      sideOptions.forEach((option, index) => option.setAttribute("aria-checked", String((index === 0 ? "bottom" : "right") === next.panelSide)));
     },
   };
 }

@@ -32,9 +32,9 @@ function isPinnedRuntime(url) {
   return url.hostname === "cdn.jsdelivr.net" && url.pathname.includes("/pyodide/");
 }
 
-/** Runtime files that keep their name across versions: the C interpreter and the MATLAB manifest. */
+/** Runtime files that keep their name across versions: the C interpreter, the MATLAB manifest and the 3D board models. */
 function isUnpinnedRuntime(url) {
-  return sameOrigin(url) && url.pathname.includes("/vendor/");
+  return sameOrigin(url) && (url.pathname.includes("/vendor/") || url.pathname.includes("/models/"));
 }
 
 self.addEventListener("install", (event) => {

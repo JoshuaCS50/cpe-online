@@ -5,6 +5,12 @@
 import { explainError } from "../diagnostics/engine";
 import { createErrorCard } from "../diagnostics/error-card";
 import type { DataFile, LessonLanguage } from "../content/schema";
+import { createBoardView } from "../board3d/board-view";
+import type { BoardView } from "../board3d/board-view";
+import type { Circuit } from "../content/circuit";
+import type { BoardId } from "../runners/arduino/profiles";
+import { canRunLive, createLiveChannel } from "../runners/arduino/live";
+import type { BoardReport } from "../runners/arduino/board";
 import { canStop, runProgram } from "../runners/run";
 import { button, el } from "../shell/dom";
 import { createConsole } from "../terminal/console";
@@ -21,6 +27,19 @@ export interface RunBoxOptions {
   actions?: HTMLElement[];
   /** Data files the program can open with fopen. */
   files?: readonly DataFile[];
+  /** Arduino sketches: sets of board inputs the learner can run with, such as a check's button presses. */
+  scenarios?: readonly BoardScenario[];
+  /** Sketches: the board they run on (default: the Uno). */
+  board?: BoardId;
+  /** Sketches: the lesson's circuit, shown on the board and used for every run. */
+  circuit?: Circuit;
+}
+
+/** Inputs for one run of a sketch: what happens to the board's inputs, and for how long it runs. */
+export interface BoardScenario {
+  label: string;
+  inputs: readonly string[];
+  ms?: number;
 }
 
 /** Data files as the runner takes them: name -> text. */
@@ -50,6 +69,17 @@ export function createRunBox(options: RunBoxOptions): RunBox {
   const stopButton = button({ label: "Stop", icon: "stop", showLabel: true, class: "btn btn-stop", onClick: () => stop() });
   stopButton.disabled = true;
 
+  // Sketches get the 3D board, and a choice of inputs when the lesson has some.
+  const board: BoardView | null = options.language === "arduino" ? createBoardView(options.board, options.circuit) : null;
+  const scenarios = options.scenarios ?? [];
+  const scenarioSelect = el("select", { class: "runbox-scenario", "aria-label": "Board inputs for Run" }) as HTMLSelectElement;
+  // With shared memory, Run without a check's inputs is live: the learner presses and turns the parts.
+  const live = board !== null && canRunLive();
+  scenarioSelect.append(el("option", { value: "-1" }, [live ? "Live: you work the parts" : "No inputs"]));
+  scenarios.forEach((scenario, index) => scenarioSelect.append(el("option", { value: String(index) }, [scenario.label])));
+  const scenarioField = el("label", { class: "runbox-scenario-field" }, [el("span", {}, ["Inputs"]), scenarioSelect]);
+  if (scenarios.length === 0) scenarioField.hidden = true;
+
   function sync(): void {
     runButton.disabled = running || busy;
     stopButton.disabled = !running || !canStop(options.language);
@@ -67,6 +97,11 @@ export function createRunBox(options: RunBoxOptions): RunBox {
     consoleIO.setInputActive(true);
     element.dataset.used = "true";
     abort = new AbortController();
+    const scenario = scenarios[Number(scenarioSelect.value)];
+    const liveChannel = live && !scenario ? createLiveChannel() : null;
+    const session = liveChannel && board ? board.startLive(options.board ?? "uno", liveChannel, code) : null;
+    let finalReport: BoardReport | null = null;
+    if (!session) board?.show(null);
     try {
       await runProgram({
         language: options.language,
@@ -75,6 +110,11 @@ export function createRunBox(options: RunBoxOptions): RunBox {
         consoleIO,
         signal: abort.signal,
         files: fileMap(options.files),
+        sim: liveChannel
+          ? { runMs: 30 * 60_000, inputs: [], board: options.board, live: liveChannel }
+          : { runMs: scenario?.ms, inputs: scenario?.inputs, board: options.board },
+        onLive: session ? (events, t, modes, reads) => session.changes(events, t, modes, reads) : undefined,
+        onBoard: board ? (report) => (session ? void (finalReport = report) : board.show(report, code)) : undefined,
         // Show what the program wrote, since there is no explorer here.
         onFiles: (after) => {
           const before = fileMap(options.files);
@@ -98,6 +138,7 @@ export function createRunBox(options: RunBoxOptions): RunBox {
     } catch (error) {
       consoleIO.writeErr("\n" + (error instanceof Error ? error.message : String(error)) + "\n");
     } finally {
+      session?.end(finalReport);
       abort = null;
       running = false;
       consoleIO.setInputActive(false);
@@ -114,7 +155,8 @@ export function createRunBox(options: RunBoxOptions): RunBox {
   }
 
   const element = el("div", { class: "runbox" }, [
-    el("div", { class: "runbox-actions" }, [runButton, stopButton, ...(options.actions ?? [])]),
+    el("div", { class: "runbox-actions" }, [runButton, stopButton, ...(options.actions ?? []), ...(board ? [scenarioField] : [])]),
+    ...(board ? [board.element] : []),
     outputEl,
   ]);
 
@@ -131,6 +173,7 @@ export function createRunBox(options: RunBoxOptions): RunBox {
     },
     dispose() {
       stop();
+      board?.dispose();
     },
   };
 }

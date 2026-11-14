@@ -1,5 +1,6 @@
 // Arduino.h for CPE Online: the Arduino functions a sketch uses, running on
-// a virtual Arduino Uno. Pins, time and servos live in the page (see
+// a virtual Arduino Uno, or a virtual ESP32 DevKit when CPE_BOARD_ESP32 is
+// defined (the ESP32 part is at the end). Pins, time and servos live in the page (see
 // src/runners/arduino/board.ts); this file reaches them through a handful of
 // imported functions. Serial output is printed to the terminal.
 //
@@ -32,6 +33,18 @@ CPE_IMPORT(delay) void cpe_delay(double ms);
 CPE_IMPORT(loop_end) void cpe_loop_end();
 CPE_IMPORT(serial_begin) void cpe_serial_begin(int baud);
 CPE_IMPORT(serial_used) void cpe_serial_used();
+CPE_IMPORT(pulse_in) double cpe_pulse_in(int pin, int state, double timeoutMicros);
+#ifdef CPE_BOARD_ESP32
+CPE_IMPORT(ledc_attach) int cpe_ledc_attach(int pin, int frequency, int bits);
+CPE_IMPORT(ledc_write) int cpe_ledc_write(int pin, int duty);
+CPE_IMPORT(analog_resolution) void cpe_analog_resolution(int bits);
+CPE_IMPORT(touch_read) int cpe_touch_read(int pin);
+CPE_IMPORT(dac_write) void cpe_dac_write(int pin, int value);
+CPE_IMPORT(deep_sleep) void cpe_deep_sleep(int rtcStart, int rtcLength);
+CPE_IMPORT(sleep_timer) void cpe_sleep_timer(double ms);
+CPE_IMPORT(wake_cause) int cpe_wake_cause();
+CPE_IMPORT(rtc_restore) void cpe_rtc_restore(int rtcStart, int rtcLength);
+#endif
 }
 
 typedef bool boolean;
@@ -43,14 +56,24 @@ typedef unsigned int word;
 #define INPUT 0
 #define OUTPUT 1
 #define INPUT_PULLUP 2
+#ifdef CPE_BOARD_ESP32
+// ESP32 DevKit: the blue LED is on GPIO 2; the A names follow the ESP32 core.
+#define LED_BUILTIN 2
+#define A0 36
+#define A3 39
+#define A4 32
+#define A5 33
+#define A6 34
+#define A7 35
+#else
 #define LED_BUILTIN 13
-
 #define A0 14
 #define A1 15
 #define A2 16
 #define A3 17
 #define A4 18
 #define A5 19
+#endif
 
 #define DEC 10
 #define HEX 16
@@ -66,13 +89,54 @@ inline void digitalWrite(int pin, int value) { cpe_digital_write(pin, value ? HI
 inline int digitalRead(int pin) { return cpe_digital_read(pin); }
 inline int analogRead(int pin) { return cpe_analog_read(pin); }
 inline void analogWrite(int pin, int value) { cpe_analog_write(pin, value < 0 ? 0 : value > 255 ? 255 : value); }
+
+#ifdef CPE_BOARD_ESP32
+// ESP32 extras, as in the Arduino-ESP32 core (version 3): LEDC PWM on any
+// output pin, analogRead resolution, touch pins, the DAC and deep sleep.
+inline bool ledcAttach(uint8_t pin, uint32_t frequency, uint8_t resolutionBits) { return cpe_ledc_attach(pin, (int)frequency, resolutionBits) != 0; }
+inline bool ledcWrite(uint8_t pin, uint32_t duty) { return cpe_ledc_write(pin, (int)duty) != 0; }
+inline void analogReadResolution(uint8_t bits) { cpe_analog_resolution(bits); }
+inline uint16_t touchRead(uint8_t pin) { return (uint16_t)cpe_touch_read(pin); }
+inline void dacWrite(uint8_t pin, uint8_t value) { cpe_dac_write(pin, value); }
+// Deep sleep. RAM is lost while asleep and the board starts again from
+// setup() when it wakes; variables marked RTC_DATA_ATTR live in a memory
+// section of their own, which the board keeps and puts back at start-up.
+#define RTC_DATA_ATTR __attribute__((section("rtc_data"), used))
+extern "C" char __start_rtc_data[] __attribute__((weak));
+extern "C" char __stop_rtc_data[] __attribute__((weak));
+inline int cpe_rtc_start() { return (int)(intptr_t)__start_rtc_data; }
+inline int cpe_rtc_length() { return __start_rtc_data ? (int)(__stop_rtc_data - __start_rtc_data) : 0; }
+
+typedef enum {
+  ESP_SLEEP_WAKEUP_UNDEFINED = 0,
+  ESP_SLEEP_WAKEUP_EXT0 = 2,
+  ESP_SLEEP_WAKEUP_EXT1 = 3,
+  ESP_SLEEP_WAKEUP_TIMER = 4,
+  ESP_SLEEP_WAKEUP_TOUCHPAD = 5,
+} esp_sleep_wakeup_cause_t;
+
+inline void esp_sleep_enable_timer_wakeup(uint64_t microseconds) { cpe_sleep_timer(microseconds / 1000.0); }
+inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return (esp_sleep_wakeup_cause_t)cpe_wake_cause(); }
+inline void esp_deep_sleep_start() {
+  fflush(stdout);
+  cpe_deep_sleep(cpe_rtc_start(), cpe_rtc_length());
+}
+#endif
 inline void tone(int pin, unsigned int frequency, unsigned long duration = 0) { cpe_tone(pin, (int)frequency, (int)duration); }
 inline void noTone(int pin) { cpe_tone(pin, 0, 0); }
 
-inline unsigned long millis() { return (unsigned long)cpe_millis(); }
-inline unsigned long micros() { return (unsigned long)(cpe_millis() * 1000.0); }
-inline void delay(unsigned long ms) { cpe_delay((double)ms); }
-inline void delayMicroseconds(unsigned int us) { cpe_delay(us / 1000.0); }
+// Each of these moves the clock and can end the run, so Serial text printed
+// so far is sent first, as a real board would already have sent it.
+inline unsigned long millis() { fflush(stdout); return (unsigned long)cpe_millis(); }
+inline unsigned long micros() { fflush(stdout); return (unsigned long)(cpe_millis() * 1000.0); }
+inline void delay(unsigned long ms) { fflush(stdout); cpe_delay((double)ms); }
+inline void delayMicroseconds(unsigned int us) { fflush(stdout); cpe_delay(us / 1000.0); }
+// How long a pin stays at `state`, in microseconds (0 after `timeout`). The
+// board answers for an ultrasonic sensor's Echo pin from the distance it is given.
+inline unsigned long pulseIn(uint8_t pin, uint8_t state, unsigned long timeout = 1000000UL) {
+  fflush(stdout);
+  return (unsigned long)cpe_pulse_in(pin, state, (double)timeout);
+}
 
 template <typename T> inline T constrain(T value, T low, T high) { return value < low ? low : value > high ? high : value; }
 inline long constrain(long value, long low, long high) { return value < low ? low : value > high ? high : value; }
@@ -189,6 +253,10 @@ void setup();
 void loop();
 
 int main() {
+#ifdef CPE_BOARD_ESP32
+  // After a wake-up from deep sleep, the RTC variables get their values back.
+  cpe_rtc_restore(cpe_rtc_start(), cpe_rtc_length());
+#endif
   setup();
   for (;;) {
     loop();

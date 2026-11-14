@@ -12,6 +12,8 @@ import type { ProgramResult, ProgramRunner } from "../../src/learn/checker";
 import { escapeSpacesInStringLiterals } from "../../src/runners/c/prepare-source";
 import { workFolderSetup } from "../../src/runners/python/work-folder";
 import { parseInput } from "../../src/runners/arduino/board";
+import { profileOf } from "../../src/runners/arduino/profiles";
+import type { BoardId } from "../../src/runners/arduino/profiles";
 import { runArduino } from "../helpers/arduino";
 import { runCpp } from "../helpers/clang";
 import { StepLimitError, runCWithLimit } from "../helpers/jscpp";
@@ -258,15 +260,17 @@ const cppRunner: ProgramRunner = async (code, stdin): Promise<ProgramResult> => 
   return { stdout: result.stdout, ok: result.error === null, ...(result.error === null ? {} : { error: result.error }) };
 };
 
-// Arduino lessons run on the virtual board, with the check's board time and inputs.
-const arduinoRunner: ProgramRunner = async (code, _stdin, sim): Promise<ProgramResult> => {
-  const result = await runArduino(code, { runMs: sim?.ms, inputs: (sim?.inputs ?? []).map(parseInput) });
-  return { stdout: result.serial, ok: result.error === null, pins: result.timeline, ...(result.error === null ? {} : { error: result.error }) };
-};
+// Arduino lessons run on the lesson's board, with the check's board time and inputs.
+const arduinoRunner =
+  (board: BoardId | undefined): ProgramRunner =>
+  async (code, _stdin, sim): Promise<ProgramResult> => {
+    const result = await runArduino(code, { runMs: sim?.ms, inputs: (sim?.inputs ?? []).map((input) => parseInput(input, profileOf(board))), board });
+    return { stdout: result.serial, ok: result.error === null, pins: result.timeline, ...(result.error === null ? {} : { error: result.error }) };
+  };
 
-function runnerFor(language: Lesson["language"], files: readonly DataFile[]): ProgramRunner | undefined {
+function runnerFor(language: Lesson["language"], files: readonly DataFile[], board?: BoardId): ProgramRunner | undefined {
   if (language === "cpp") return cppRunner;
-  if (language === "arduino") return arduinoRunner;
+  if (language === "arduino") return arduinoRunner(board);
   if (language === "c") return cRunner(files);
   return language === "python" ? pythonRunner(files) : undefined;
 }
@@ -301,7 +305,7 @@ describe("lesson library", () => {
 
   it.each(withTryIt.map((item) => [item.id, item] as const))("%s: the solution passes its checks", async (_id, item) => {
     const tryIt = item.tryIt!;
-    const run = runnerFor(tryIt.solution.language, item.files);
+    const run = runnerFor(tryIt.solution.language, item.files, item.board);
     expect(run, `no test runner for ${tryIt.solution.language}`).toBeDefined();
     const outcomes = await runChecks(tryIt.solution.code, tryIt.solution.language, tryIt.checks, run!);
     expect(outcomes.filter((outcome) => !outcome.pass)).toEqual([]);
@@ -310,13 +314,13 @@ describe("lesson library", () => {
 
   it.each(withTryIt.map((item) => [item.id, item] as const))("%s: the starter does not pass yet", async (_id, item) => {
     const tryIt = item.tryIt!;
-    const outcomes = await runChecks(tryIt.starter.code, tryIt.starter.language, tryIt.checks, runnerFor(tryIt.starter.language, item.files)!);
+    const outcomes = await runChecks(tryIt.starter.code, tryIt.starter.language, tryIt.checks, runnerFor(tryIt.starter.language, item.files, item.board)!);
     expect(allPassed(outcomes)).toBe(false);
   }, 60_000);
 
   it.each(library.lessons.filter((item) => item.example).map((item) => [item.id, item] as const))("%s: the example runs without an error", async (_id, item) => {
     const example = item.example!;
-    const result = await runnerFor(example.language, item.files)!(example.code, []);
+    const result = await runnerFor(example.language, item.files, item.board)!(example.code, []);
     expect(result.error).toBeUndefined();
     // A sketch that only drives pins shows its work in the pin timeline.
     expect((result.stdout + (result.pins ?? []).join("")).trim().length).toBeGreaterThan(0);

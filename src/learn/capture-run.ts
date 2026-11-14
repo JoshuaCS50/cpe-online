@@ -2,6 +2,7 @@
 // checker. Input comes from a fixed list instead of the keyboard.
 
 import type { LessonLanguage } from "../content/schema";
+import type { BoardId } from "../runners/arduino/profiles";
 import { runProgram } from "../runners/run";
 import type { ConsoleIO } from "../terminal/console";
 import type { ProgramResult, ProgramRunner } from "./checker";
@@ -47,7 +48,13 @@ export function createCaptureConsole(stdin: readonly string[]): CaptureConsole {
 
 /** A runner for the checker. `signal` lets the learner cancel a check in progress. */
 /** `files` are the data files the program can open; each run starts from a fresh copy. */
-export function createProgramRunner(language: LessonLanguage, fileName: string, signal?: AbortSignal, files: Record<string, string> = {}): ProgramRunner {
+export function createProgramRunner(
+  language: LessonLanguage,
+  fileName: string,
+  signal?: AbortSignal,
+  files: Record<string, string> = {},
+  board?: BoardId,
+): ProgramRunner {
   return async (code, stdin, sim): Promise<ProgramResult> => {
     const consoleIO = createCaptureConsole(stdin);
     const abort = new AbortController();
@@ -71,8 +78,8 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
         onError: (raw) => void (error = raw.text),
         files: { ...files },
         onFiles: (after) => void (filesAfter = after),
-        sim: { runMs: sim?.ms, inputs: sim?.inputs },
-        onBoard: (timeline) => void (pins = timeline),
+        sim: { runMs: sim?.ms, inputs: sim?.inputs, board },
+        onBoard: (report) => void (pins = report.timeline),
       });
       return {
         stdout: consoleIO.stdout(),

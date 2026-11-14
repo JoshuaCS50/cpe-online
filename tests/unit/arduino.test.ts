@@ -4,6 +4,8 @@
 
 import { describe, expect, it } from "vitest";
 import { parseInput } from "../../src/runners/arduino/board";
+import { createLiveChannel, setLiveInput } from "../../src/runners/arduino/live";
+import { ESP32 } from "../../src/runners/arduino/profiles";
 import { runArduino } from "../helpers/arduino";
 
 const T = 60_000;
@@ -14,6 +16,9 @@ describe("parseInput", () => {
     expect(parseInput("A0 512 at 0")).toEqual({ pin: 14, at: 0, value: 512 });
     expect(parseInput("7 low at 300 ms")).toEqual({ pin: 7, at: 300, value: 0 });
     expect(() => parseInput("pin 2 is high")).toThrow(/should look like/);
+    expect(parseInput("GPIO 34 2048 at 0", ESP32)).toEqual({ pin: 34, at: 0, value: 2048 });
+    expect(parseInput("A0 100 at 5", ESP32)).toEqual({ pin: 36, at: 5, value: 100 });
+    expect(() => parseInput("GPIO 7 HIGH at 0", ESP32)).toThrow(/has no pin/);
   });
 });
 
@@ -139,6 +144,24 @@ void loop() {
     expect(result.timeline).toEqual(["0 ms: pin 6 PWM 100", "0 ms: servo on pin 9 at 0 degrees", "400 ms: servo on pin 9 at 180 degrees"]);
   }, T);
 
+  it("keeps Serial text printed just before the run time ends", async () => {
+    const result = await runArduino(
+      `void setup() {
+  Serial.begin(9600);
+}
+
+void loop() {
+  Serial.print("tick ");
+  Serial.println(millis() / 500);
+  delay(500);
+}
+`,
+      { runMs: 900 },
+    );
+    expect(result.error).toBeNull();
+    expect(result.serial).toBe("tick 0\ntick 1\n");
+  }, T);
+
   it("lets millis() drive a blink without delay", async () => {
     const result = await runArduino(
       `unsigned long last = 0;
@@ -191,6 +214,234 @@ void loop() {
 }
 `);
     expect(result.error).toMatch(/^sketch\.ino:2:22: error: expected ';'/m);
+  }, T);
+
+  it("runs on an ESP32: GPIO names, LED_BUILTIN on GPIO 2", async () => {
+    const result = await runArduino(
+      `void setup() {
+  Serial.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
+  Serial.println(LED_BUILTIN);
+}
+
+void loop() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(250);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(250);
+}
+`,
+      { runMs: 900, board: "esp32" },
+    );
+    expect(result.error).toBeNull();
+    expect(result.serial).toBe("2\n");
+    expect(result.timeline).toEqual(["0 ms: GPIO 2 HIGH", "250 ms: GPIO 2 LOW", "500 ms: GPIO 2 HIGH", "750 ms: GPIO 2 LOW"]);
+  }, T);
+
+  it("refuses outputs on the ESP32's input-only pins and has no pull-ups there", async () => {
+    const result = await runArduino(
+      `void setup() {
+  pinMode(34, OUTPUT);
+  pinMode(35, INPUT_PULLUP);
+}
+
+void loop() {
+  digitalWrite(34, HIGH);
+  delay(100);
+}
+`,
+      { runMs: 300, board: "esp32" },
+    );
+    expect(result.error).toBeNull();
+    expect(result.timeline).toEqual([]);
+    expect(result.warnings.join("\n")).toMatch(/can only read/);
+    expect(result.warnings.join("\n")).toMatch(/no pull-up resistor/);
+  }, T);
+
+  it("reads 12 bits on an ESP32, or fewer after analogReadResolution", async () => {
+    const result = await runArduino(
+      `void setup() {
+  Serial.begin(115200);
+  Serial.println(analogRead(34));
+  analogReadResolution(10);
+  Serial.println(analogRead(34));
+}
+
+void loop() {
+}
+`,
+      { runMs: 50, board: "esp32", inputs: [parseInput("GPIO 34 2048 at 0", ESP32)] },
+    );
+    expect(result.error).toBeNull();
+    expect(result.serial).toBe("2048\n512\n");
+  }, T);
+
+  it("dims with LEDC on an ESP32 and shows the duty at its resolution", async () => {
+    const result = await runArduino(
+      `void setup() {
+  ledcAttach(18, 5000, 10);
+}
+
+void loop() {
+  ledcWrite(18, 256);
+  delay(100);
+  ledcWrite(18, 1023);
+  delay(100);
+}
+`,
+      { runMs: 150, board: "esp32" },
+    );
+    expect(result.error).toBeNull();
+    expect(result.timeline).toEqual(["0 ms: GPIO 18 PWM 256 of 1023", "100 ms: GPIO 18 PWM 1023 of 1023"]);
+  }, T);
+
+  it("wakes an ESP32 from deep sleep with only RTC variables kept", async () => {
+    const result = await runArduino(
+      `RTC_DATA_ATTR int boots = 0;
+int plain = 0;
+
+void setup() {
+  Serial.begin(115200);
+  boots++;
+  plain++;
+  Serial.print(boots);
+  Serial.print(" ");
+  Serial.print(plain);
+  Serial.print(" ");
+  Serial.println(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER ? "timer" : "power");
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(100);
+  esp_sleep_enable_timer_wakeup(1000000);
+  esp_deep_sleep_start();
+}
+
+void loop() {
+}
+`,
+      { runMs: 2500, board: "esp32" },
+    );
+    expect(result.error).toBeNull();
+    expect(result.serial).toBe("1 1 power\n2 1 timer\n3 1 timer\n");
+    // The LED goes dark while the board sleeps: pins stop being driven.
+    expect(result.timeline).toEqual(["0 ms: GPIO 2 HIGH", "100 ms: GPIO 2 LOW", "1100 ms: GPIO 2 HIGH", "1200 ms: GPIO 2 LOW", "2200 ms: GPIO 2 HIGH", "2300 ms: GPIO 2 LOW"]);
+  }, T);
+
+  it("reads touch pins: about 70 untouched, lower when touched", async () => {
+    const result = await runArduino(
+      `void setup() {
+  Serial.begin(115200);
+}
+
+void loop() {
+  Serial.println(touchRead(4));
+  delay(100);
+}
+`,
+      { runMs: 250, board: "esp32", inputs: [parseInput("GPIO 4 12 at 100", ESP32)] },
+    );
+    expect(result.error).toBeNull();
+    expect(result.serial).toBe("70\n12\n12\n");
+  }, T);
+
+  it("runs live: inputs from the page reach the sketch and changes stream out", async () => {
+    const channel = createLiveChannel();
+    setLiveInput(channel, 2, 0); // the button on pin 2 is held down
+    const streamed: string[] = [];
+    let flushes = 0;
+    const result = await runArduino(
+      `void setup() {
+  pinMode(2, INPUT_PULLUP);
+  pinMode(13, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(13, digitalRead(2) == LOW ? HIGH : LOW);
+  delay(10);
+}
+`,
+      {
+        runMs: 150,
+        live: {
+          channel,
+          onChanges: (events) => {
+            flushes += 1;
+            streamed.push(...events.map((event) => `${event.pin}:${event.value}`));
+          },
+        },
+      },
+    );
+    expect(result.error).toBeNull();
+    expect(result.timeline[0]).toMatch(/^\d+ ms: pin 13 HIGH$/);
+    expect(streamed).toContain("13:1");
+    expect(flushes).toBeGreaterThan(1);
+  }, T);
+
+  it("measures distance with an ultrasonic sensor through pulseIn", async () => {
+    const result = await runArduino(
+      `const int TRIG = 9;
+const int ECHO = 10;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+}
+
+void loop() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  long micros = pulseIn(ECHO, HIGH, 30000);
+  Serial.println(micros / 58);
+  delay(200);
+}
+`,
+      { runMs: 450, inputs: [parseInput("10 25 at 0"), parseInput("10 120 at 200")] },
+    );
+    expect(result.error).toBeNull();
+    expect(result.serial).toBe("25\n120\n120\n");
+  }, T);
+
+  it("shows text on an OLED screen and records it in the timeline", async () => {
+    const result = await runArduino(
+      `#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
+
+void setup() {
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Soil");
+  display.setTextSize(2);
+  display.print(42);
+  display.print("%");
+  display.display();
+}
+
+void loop() {
+}
+`,
+      { runMs: 50 },
+    );
+    expect(result.error).toBeNull();
+    expect(result.timeline).toEqual(['0 ms: screen shows "Soil / 42%"']);
+  }, T);
+
+  it("has no ESP32 functions on an Uno, as on a real one", async () => {
+    const result = await runArduino(`void setup() {
+  ledcAttach(9, 5000, 8);
+}
+
+void loop() {
+}
+`);
+    expect(result.error).toMatch(/use of undeclared identifier 'ledcAttach'/);
   }, T);
 
   it("stops a sketch that waits forever in setup when the time is up", async () => {

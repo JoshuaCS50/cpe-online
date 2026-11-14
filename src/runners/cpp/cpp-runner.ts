@@ -7,6 +7,8 @@
 
 import type { DebugResult } from "../../debugger/types";
 import type { ConsoleIO } from "../../terminal/console";
+import type { BoardEvent, BoardReport, PinReads } from "../arduino/board";
+import { stopLive } from "../arduino/live";
 import { answerInput, canBlockForInput, createInputChannel } from "../input-channel";
 import type { CppRunRequest, CppWorkerMessage } from "./protocol";
 
@@ -18,14 +20,16 @@ export interface CppRunOptions {
   onError?: (text: string) => void;
   /** Run the code as an Arduino sketch on the virtual board. */
   sketch?: CppRunRequest["sketch"];
-  /** Receives the board's pin timeline and warnings after a sketch ran. */
-  onBoard?: (timeline: string[], warnings: string[]) => void;
+  /** Receives the board's pin changes and warnings after a sketch ran. */
+  onBoard?: (report: BoardReport) => void;
+  /** Live sketches: changes as they happen, with the board time and pin modes. */
+  onLive?: (events: BoardEvent[], t: number, modes: number[], reads: PinReads) => void;
 }
 
 /** Longest timeline printed in the terminal; the rest is summarised. */
 const TIMELINE_LINES = 60;
 
-function printBoard(consoleIO: ConsoleIO, timeline: string[], warnings: string[], runMs: number): void {
+function printBoard(consoleIO: ConsoleIO, { timeline, warnings, runMs }: BoardReport): void {
   const seconds = runMs >= 1000 ? `${runMs / 1000} s` : `${runMs} ms`;
   if (timeline.length === 0) {
     consoleIO.writeInfo(`\n--- No pin changed in the first ${seconds} of board time ---\n`);
@@ -71,6 +75,18 @@ export function runCppInWorker(options: CppRunOptions): Promise<DebugResult> {
     }
 
     function stop(): void {
+      // A live sketch stops by itself when asked, keeping the compiler loaded;
+      // anything else (or a live sketch that does not answer) ends the worker.
+      const live = options.sketch?.live;
+      if (live) {
+        stopLive(live);
+        setTimeout(() => {
+          if (settled) return;
+          discardWorker();
+          finish({ ok: false, exitCode: -1, stopped: true });
+        }, 1500);
+        return;
+      }
       discardWorker();
       finish({ ok: false, exitCode: -1, stopped: true });
     }
@@ -108,12 +124,15 @@ export function runCppInWorker(options: CppRunOptions): Promise<DebugResult> {
           }
           break;
         case "board":
-          printBoard(consoleIO, message.timeline, message.warnings, message.runMs);
-          options.onBoard?.(message.timeline, message.warnings);
+          printBoard(consoleIO, message.report);
+          options.onBoard?.(message.report);
+          break;
+        case "live":
+          options.onLive?.(message.events, message.t, message.modes, message.reads);
           break;
         case "done":
           if (!options.sketch) consoleIO.writeInfo(`\n[program exited with code ${message.exitCode}]\n`);
-          finish({ ok: message.exitCode === 0, exitCode: message.exitCode });
+          finish({ ok: message.exitCode === 0, exitCode: message.exitCode, ...(options.sketch?.live && signal?.aborted ? { stopped: true } : {}) });
           break;
         case "error":
           reportError(message.message);

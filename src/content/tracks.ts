@@ -44,7 +44,7 @@ export const TRACKS: readonly Track[] = [
     id: "embedded",
     title: "Arduino and embedded",
     titleKid: "Tiny computers",
-    blurb: "Pins, sensors and timing on Arduino and PIC boards.",
+    blurb: "Pins, sensors and timing on Arduino, ESP32 and PIC boards.",
     units: [
       { id: "b1", title: "Meet the board", titleKid: "Meet your tiny computer" },
       { id: "b2", title: "Digital pins", titleKid: "Lights and buttons" },
@@ -56,6 +56,8 @@ export const TRACKS: readonly Track[] = [
       { id: "b8", title: "Communication", titleKid: "Boards that talk" },
       { id: "b9", title: "Putting it together", titleKid: "Build a machine" },
       { id: "b10", title: "Debugging the board", titleKid: "Fixing the board" },
+      { id: "b11", title: "ESP32: a faster, connected board", titleKid: "A board with Wi-Fi" },
+      { id: "b12", title: "ESP32 Wi-Fi and IoT", titleKid: "Boards on the internet" },
     ],
   },
   {

@@ -121,11 +121,11 @@ async function run(request: CppRunRequest): Promise<void> {
   }
 
   // The checker runs the same code once per test input: compile it once.
-  const key = `${request.sketch ? "sketch" : "cpp"}\n${request.code}`;
+  const key = `${request.sketch ? `sketch:${request.sketch.board ?? "uno"}` : "cpp"}\n${request.code}`;
   let program = lastProgram?.key === key ? lastProgram : null;
   if (!program) {
     post({ type: "compiling" });
-    const compiled = request.sketch ? await compileSketch(runClang, request.code) : await compileCpp(runClang, request.code);
+    const compiled = request.sketch ? await compileSketch(runClang, request.code, request.sketch.board) : await compileCpp(runClang, request.code);
     if (!compiled.wasm) {
       post({ type: "error", stage: "compile", message: compiled.messages || "The compiler stopped without a message." });
       return;
@@ -150,8 +150,12 @@ async function run(request: CppRunRequest): Promise<void> {
       },
     };
     if (request.sketch) {
-      const { board, exitCode } = runSketch(module, host, request.sketch);
-      post({ type: "board", timeline: board.timeline(), warnings: board.warnings, runMs: board.runMs });
+      const { live, ...sketch } = request.sketch;
+      const { board, exitCode } = runSketch(module, host, {
+        ...sketch,
+        ...(live ? { live: { channel: live, onChanges: (events, t, modes, reads) => post({ type: "live", events, t, modes, reads }) } } : {}),
+      });
+      post({ type: "board", report: board.report() });
       post({ type: "done", exitCode });
       return;
     }

@@ -20,14 +20,21 @@ import type { CheckOutcome } from "./checker";
 import { LESSONS, findLesson, lessonAfter, loadLesson } from "./library";
 import { loadDraft, loadProgress, markDone, saveDraft } from "./progress";
 import type { Progress } from "./progress";
+import { circuitDocs } from "../content/circuit";
+import { TERMS, conceptName, extraInfo } from "../content/glossary";
+import type { GlossaryEntry } from "../content/glossary";
+import { createBoardView } from "../board3d/board-view";
+import { boardPage } from "./board-pages";
+import { componentsPage } from "./components-page";
 import { createRunBox, fileMap } from "./run-box";
+import type { BoardScenario } from "./run-box";
 
-export type LessonTab = "overview" | "example" | "try";
+export type LessonTab = "overview" | "circuit" | "example" | "try";
 
-const TAB_LABELS: Record<LessonTab, string> = { overview: "Overview", example: "Example", try: "Try it yourself" };
+const TAB_LABELS: Record<LessonTab, string> = { overview: "Overview", circuit: "Circuit", example: "Example", try: "Try it yourself" };
 
 export function isLessonTab(value: string | undefined): value is LessonTab {
-  return value === "overview" || value === "example" || value === "try";
+  return value === "overview" || value === "circuit" || value === "example" || value === "try";
 }
 
 export interface LearnOptions {
@@ -67,12 +74,29 @@ function prose(html: string, extraClass = ""): HTMLElement {
   return node;
 }
 
+/** The distinct input sets of a sketch lesson's checks, offered for Run. */
+function boardScenarios(tryIt: TryIt): BoardScenario[] {
+  const seen = new Set<string>();
+  const scenarios: BoardScenario[] = [];
+  for (const check of tryIt.checks) {
+    if (!("inputs" in check) || !check.inputs || check.inputs.length === 0) continue;
+    const key = JSON.stringify([check.inputs, check.ms]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const text = check.inputs.join(", ");
+    scenarios.push({ label: `Check ${scenarios.length + 1}: ${text.length > 48 ? text.slice(0, 47) + "…" : text}`, inputs: check.inputs, ms: check.ms });
+  }
+  return scenarios;
+}
+
 export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
   const { store } = options;
   let progress: Progress = await loadProgress(store);
   let kid = options.getSettings().kidMode;
   let currentId: string | null = null;
   let currentTab: LessonTab = "overview";
+  /** The board page on show, if any. */
+  let currentBoard: "uno" | "esp32" | "components" | null = null;
   let lesson: Lesson | null = null;
   /** Undoes whatever the open lesson set up: editors, running programs, timers. */
   let cleanup: (() => void)[] = [];
@@ -91,6 +115,19 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
   kidButton.title = "Show every explanation in short, simple words";
   kidButton.addEventListener("click", () => options.updateSettings({ kidMode: !kid }));
 
+  // Paper or night paper. The button shows what a press switches to.
+  const isDark = (): boolean => document.documentElement.dataset.theme === "dark";
+  const themeButton = el("button", { type: "button", class: "btn btn-outline theme-toggle" });
+  function renderThemeButton(): void {
+    const dark = isDark();
+    themeButton.replaceChildren(icon(dark ? "sun" : "moon"));
+    themeButton.setAttribute("aria-label", dark ? "Switch to light paper" : "Switch to dark mode");
+    themeButton.title = dark ? "Light paper" : "Dark mode";
+  }
+  themeButton.addEventListener("click", () => options.updateSettings({ theme: isDark() ? "light" : "vscode" }));
+  // "Match device" changes with the device, after the shell has applied it.
+  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => queueMicrotask(renderThemeButton));
+
   const bar = el("header", { class: "learn-bar" }, [
     el("span", { class: "brand" }, [
       el("span", { class: "brand-mark", "aria-hidden": "true" }, [">_"]),
@@ -100,9 +137,31 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
     el("span", { class: "learn-bar-spacer" }),
     pill,
     kidButton,
+    themeButton,
   ]);
 
-  const listEl = el("nav", { class: "learn-list", "aria-label": "Lessons" });
+  // Search: lessons whose title, unit or topics contain every word typed.
+  let query = "";
+  const searchInput = el("input", { type: "search", class: "learn-search", placeholder: "Search lessons and topics", "aria-label": "Search lessons and topics" }) as HTMLInputElement;
+  searchInput.addEventListener("input", () => {
+    query = searchInput.value.trim().toLowerCase();
+    renderList();
+  });
+  const searchText = new Map<string, string>();
+  function matches(item: LessonMeta): boolean {
+    if (!query) return true;
+    let text = searchText.get(item.id);
+    if (text === undefined) {
+      const unit = findUnit(item.track, item.unit);
+      text = [item.title, item.titleKid, unit?.title ?? "", unit?.titleKid ?? "", item.symbol ?? "", ...item.concepts.map((id) => `${id} ${TERMS[id]?.term ?? conceptName(id)}`)]
+        .join(" ")
+        .toLowerCase();
+      searchText.set(item.id, text);
+    }
+    return query.split(/\s+/).every((word) => text!.includes(word));
+  }
+  const listItems = el("div", { class: "learn-list-items" });
+  const listEl = el("nav", { class: "learn-list", "aria-label": "Lessons" }, [searchInput, listItems]);
   const mainEl = el("main", { class: "learn-main" });
   const body = el("div", { class: "learn-body", "data-screen": "list" }, [listEl, mainEl]);
   const element = el("div", { class: "learn" }, [bar, body]);
@@ -143,9 +202,18 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
   function renderList(): void {
     const sections: HTMLElement[] = [];
     for (const track of TRACKS) {
-      const inTrack = LESSONS.filter((item) => item.track === track.id);
+      const inTrack = LESSONS.filter((item) => item.track === track.id && matches(item));
       if (inTrack.length === 0) continue;
       sections.push(el("h2", { class: "learn-track" }, [kid ? track.titleKid : track.title]));
+      if (track.id === "embedded") {
+        sections.push(
+          el("nav", { class: "board-links", "aria-label": "Board reference" }, [
+            el("a", { class: "board-link", href: "#/learn/board.uno", "aria-current": currentBoard === "uno" ? "page" : undefined }, [kid ? "Uno pins" : "Uno pinout"]),
+            el("a", { class: "board-link", href: "#/learn/board.esp32", "aria-current": currentBoard === "esp32" ? "page" : undefined }, [kid ? "ESP32 pins" : "ESP32 pinout"]),
+            el("a", { class: "board-link", href: "#/learn/components", "aria-current": currentBoard === "components" ? "page" : undefined }, [kid ? "Parts" : "Components"]),
+          ]),
+        );
+      }
       for (const unit of track.units) {
         const inUnit = inTrack.filter((item) => item.unit === unit.id);
         if (inUnit.length === 0) continue;
@@ -155,7 +223,8 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
         );
       }
     }
-    listEl.replaceChildren(...sections);
+    if (sections.length === 0) sections.push(el("p", { class: "learn-search-empty" }, [`No lessons match "${searchInput.value.trim()}".`]));
+    listItems.replaceChildren(...sections);
   }
 
   // ───── Welcome (no lesson open) ─────
@@ -288,6 +357,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       kid: () => kid,
       actions: [openButton],
       files: item.files,
+      board: item.board,
     });
     cleanup.push(() => runBox.dispose());
     return el("section", { class: "lesson-panel", "data-tab": "example" }, [
@@ -373,6 +443,9 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       getCode: () => editor.getDoc(),
       kid: () => kid,
       files: item.files,
+      board: item.board,
+      scenarios: boardScenarios(tryIt),
+      circuit: item.circuit,
       onErrorLine: (line) => {
         if (line === null) editor.clearErrorLine();
         else editor.highlightErrorLine(line);
@@ -419,7 +492,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       results.replaceChildren(el("p", { class: "try-status" }, ["Checking your answer by running it…"]));
       const code = editor.getDoc();
       try {
-        const outcomes = await runChecks(code, starter.language, tryIt.checks, createProgramRunner(starter.language, starter.fileName, checking.signal, fileMap(item.files)));
+        const outcomes = await runChecks(code, starter.language, tryIt.checks, createProgramRunner(starter.language, starter.fileName, checking.signal, fileMap(item.files), item.board));
         if (disposed) return;
         const passed = allPassed(outcomes);
         const summary = passed
@@ -478,13 +551,91 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
     ]);
   }
 
+  /** One explained term or part in the Extra info window. */
+  function glossaryCard(entry: GlossaryEntry): HTMLElement {
+    const rows: HTMLElement[] = [el("h3", {}, [entry.term]), el("p", {}, withInlineCode(entry.meaning))];
+    if (entry.usedFor) rows.push(el("p", {}, [el("strong", {}, ["Where it is used: "]), ...withInlineCode(entry.usedFor)]));
+    if (entry.howTo) rows.push(el("p", {}, [el("strong", {}, ["How to use it: "]), ...withInlineCode(entry.howTo)]));
+    if (entry.code) rows.push(el("pre", { class: "extra-code" }, [el("code", {}, [entry.code])]));
+    if (entry.watchOut) rows.push(el("p", { class: "extra-watch" }, [el("strong", {}, ["Watch out: "]), ...withInlineCode(entry.watchOut)]));
+    return el("article", { class: "extra-card" }, rows);
+  }
+
+  /** The Extra info window: every term of the lesson, then its board and parts, explained in more depth. */
+  function openExtraInfo(item: Lesson): void {
+    const info = extraInfo(item.concepts, item.circuit, item.language === "arduino" ? (item.board ?? "uno") : undefined);
+    const close = button({ label: "Close", icon: "x", class: "btn btn-icon btn-quiet extra-close", onClick: () => dialog.close() });
+    const sections: HTMLElement[] = [];
+    if (info.terms.length > 0) sections.push(el("h2", {}, [kid ? "Words" : "Words in this lesson"]), ...info.terms.map(({ entry }) => glossaryCard(entry)));
+    if (info.components.length > 0) sections.push(el("h2", {}, [kid ? "Parts" : "Boards and parts"]), ...info.components.map(({ entry }) => glossaryCard(entry)));
+    if (info.missing.length > 0) {
+      sections.push(
+        el("h2", {}, ["Also in this lesson"]),
+        el("p", { class: "extra-missing" }, [info.missing.map(conceptName).join(" · ")]),
+      );
+    }
+    const dialog = el("dialog", { class: "extra-info", "aria-label": `Extra info: ${item.title}` }, [
+      el("header", { class: "extra-head" }, [el("div", {}, [el("p", { class: "eyebrow" }, ["Extra info"]), el("h2", {}, [titleOf(item)])]), close]),
+      el("div", { class: "extra-body" }, sections),
+    ]) as HTMLDialogElement;
+    dialog.addEventListener("close", () => dialog.remove());
+    // A click on the shaded area outside the window closes it.
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    element.append(dialog);
+    dialog.showModal();
+  }
+
+  /** The circuit tab: the circuit in 3D, what you need, how it is wired, and the numbers behind it. */
+  function buildCircuit(item: Lesson): HTMLElement {
+    const circuit = item.circuit!;
+    const docs = circuitDocs(circuit);
+    const view = createBoardView(circuit.board, circuit);
+    cleanup.push(() => view.dispose());
+    const table = (headings: string[], rows: string[][]): HTMLElement =>
+      el("div", { class: "table-scroll" }, [
+        el("table", { class: "circuit-table" }, [
+          el("thead", {}, [el("tr", {}, headings.map((heading) => el("th", {}, [heading])))]),
+          el("tbody", {}, rows.map((row) => el("tr", {}, row.map((cell, index) => el("td", index === 0 ? { class: "circuit-pin" } : {}, [cell]))))),
+        ]),
+      ]);
+    return el("section", { class: "lesson-panel circuit-panel", "data-tab": "circuit" }, [
+      el("p", { class: "panel-lead" }, [
+        kid ? "This is how the parts join together. Turn the picture with your finger." : "The circuit this lesson's sketch runs on. Drag to turn it; Run on the next tabs plays the sketch on it.",
+      ]),
+      view.element,
+      el("div", { class: "circuit-columns" }, [
+        el("div", {}, [
+          el("h2", {}, [kid ? "You need" : "What you need"]),
+          el("ul", { class: "circuit-parts" }, docs.parts.map((part) => el("li", {}, [el("span", { class: "circuit-count" }, [`${part.count} ×`]), " ", part.name]))),
+        ]),
+        el("div", {}, [
+          el("h2", {}, ["Wiring"]),
+          table(["Pin", "Connects to", "What it does"], docs.wiring.map((row) => [row.pin, row.to, row.does])),
+        ]),
+      ]),
+      el("h2", {}, ["Specifications"]),
+      table(["", ""], docs.specs.map((spec) => [spec.name, spec.value])),
+      el("p", {}, [
+        el("a", { class: "btn btn-outline", href: `#/learn/board.${circuit.board}` }, [circuit.board === "esp32" ? "ESP32 DevKit pinout" : "Arduino Uno pinout"]),
+      ]),
+    ]);
+  }
+
   async function renderLesson(item: Lesson, token: number): Promise<void> {
-    const tabs: LessonTab[] = ["overview", ...(item.example ? (["example"] as const) : []), ...(item.tryIt ? (["try"] as const) : [])];
+    const tabs: LessonTab[] = [
+      "overview",
+      ...(item.circuit ? (["circuit"] as const) : []),
+      ...(item.example ? (["example"] as const) : []),
+      ...(item.tryIt ? (["try"] as const) : []),
+    ];
     if (!tabs.includes(currentTab)) currentTab = "overview";
     const unit = findUnit(item.track, item.unit);
     const kind = item.kind === "mini" ? "Quick reference" : "Lesson";
 
     const panels: HTMLElement[] = [buildOverview(item)];
+    if (item.circuit) panels.push(buildCircuit(item));
     if (item.example) panels.push(buildExample(item, item.example));
     if (item.tryIt) panels.push(await buildTry(item, item.tryIt));
     // Another lesson was opened while this one was loading its draft.
@@ -494,7 +645,10 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
       el("article", { class: "lesson" }, [
         el("a", { class: "lesson-back", href: "#/learn" }, [icon("arrowLeft"), el("span", {}, ["All lessons"])]),
         el("p", { class: "eyebrow" }, [`${unit ? (kid ? unit.titleKid : unit.title) : item.unit} · ${kind} · ${item.minutes} min`]),
-        el("h1", {}, [titleOf(item), ...(isDone(item.id) ? [el("span", { class: "done-badge" }, [icon("check"), "Done"])] : [])]),
+        el("div", { class: "lesson-title-row" }, [
+          el("h1", {}, [titleOf(item), ...(isDone(item.id) ? [el("span", { class: "done-badge" }, [icon("check"), "Done"])] : [])]),
+          button({ label: kid ? "More" : "Extra info", icon: "info", showLabel: true, class: "btn btn-outline extra-button", onClick: () => openExtraInfo(item) }),
+        ]),
         el(
           "nav",
           { class: "lesson-tabs", "aria-label": "Parts of this lesson" },
@@ -524,6 +678,32 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
   }
 
   function show(lessonId: string | null, tab: LessonTab = "overview"): void {
+    if (lessonId === "components") {
+      loadToken += 1;
+      disposeLesson();
+      lesson = null;
+      currentId = null;
+      currentBoard = "components";
+      body.dataset.screen = "lesson";
+      renderList();
+      mainEl.replaceChildren(componentsPage(LESSONS, titleOf, (id) => lessonHref(id)));
+      mainEl.scrollTop = 0;
+      return;
+    }
+    const board = lessonId === "board.uno" ? "uno" : lessonId === "board.esp32" ? "esp32" : null;
+    if (board) {
+      loadToken += 1;
+      disposeLesson();
+      lesson = null;
+      currentId = null;
+      currentBoard = board;
+      body.dataset.screen = "lesson";
+      renderList();
+      mainEl.replaceChildren(boardPage(board));
+      mainEl.scrollTop = 0;
+      return;
+    }
+    currentBoard = null;
     const id = lessonId !== null && findLesson(lessonId) ? lessonId : null;
     const sameLesson = id !== null && id === currentId && lesson !== null;
     currentId = id;
@@ -566,6 +746,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
   }
 
   options.onSettingsChange((settings) => {
+    renderThemeButton();
     if (settings.kidMode === kid) return;
     kid = settings.kidMode;
     renderChrome();
@@ -575,6 +756,7 @@ export async function createLearnApp(options: LearnOptions): Promise<LearnApp> {
   });
 
   renderChrome();
+  renderThemeButton();
   renderList();
   renderWelcome();
 
