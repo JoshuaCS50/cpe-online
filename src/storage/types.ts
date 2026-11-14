@@ -1,8 +1,9 @@
 // Records kept on the device.
 
-export type Language = "c" | "cpp" | "python" | "java" | "matlab";
+/** "text" is a data file (notes, CSV, logs): editable, readable by programs, not runnable. */
+export type Language = "c" | "cpp" | "arduino" | "python" | "java" | "matlab" | "text";
 
-export const LANGUAGES: readonly Language[] = ["c", "cpp", "python", "java", "matlab"];
+export const LANGUAGES: readonly Language[] = ["c", "cpp", "arduino", "python", "java", "matlab", "text"];
 
 export function isLanguage(value: unknown): value is Language {
   return typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
@@ -38,6 +39,10 @@ export interface Settings {
   outputWrap: boolean;
   seenOnboarding: boolean;
   dismissedInstallBanner: boolean;
+  /** Explanations use the hand-written text for young readers. Applies to lessons and error cards. */
+  kidMode: boolean;
+  /** Where Code mode's output panel (terminal, problems, board) sits: under the editor or beside it. */
+  panelSide: "bottom" | "right";
 }
 
 /** Everything a store holds, for atomic imports. */

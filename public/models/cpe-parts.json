@@ -1,0 +1,770 @@
+{
+ "version": 1,
+ "positionScale": 0.01,
+ "parts": {
+  "uno": [
+   {
+    "material": "pcb",
+    "vertexCount": 344,
+    "indexCount": 996,
+    "positions": 0,
+    "normals": 2064,
+    "indices": 3096,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 3302,
+    "indexCount": 8628,
+    "positions": 5088,
+    "normals": 24900,
+    "indices": 34808,
+    "indexBits": 16
+   },
+   {
+    "material": "plastic-black",
+    "vertexCount": 1122,
+    "indexCount": 2304,
+    "positions": 52064,
+    "normals": 58796,
+    "indices": 62164,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 912,
+    "indexCount": 1368,
+    "positions": 66772,
+    "normals": 72244,
+    "indices": 74980,
+    "indexBits": 16
+   },
+   {
+    "material": "red",
+    "vertexCount": 238,
+    "indexCount": 696,
+    "positions": 77716,
+    "normals": 79144,
+    "indices": 79860,
+    "indexBits": 16
+   },
+   {
+    "material": "chip",
+    "vertexCount": 166,
+    "indexCount": 372,
+    "positions": 81252,
+    "normals": 82248,
+    "indices": 82748,
+    "indexBits": 16
+   },
+   {
+    "material": "capacitor",
+    "vertexCount": 428,
+    "indexCount": 1248,
+    "positions": 83492,
+    "normals": 86060,
+    "indices": 87344,
+    "indexBits": 16
+   },
+   {
+    "material": "led-l",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 89840,
+    "normals": 89984,
+    "indices": 90056,
+    "indexBits": 16
+   },
+   {
+    "material": "led-tx",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 90128,
+    "normals": 90272,
+    "indices": 90344,
+    "indexBits": 16
+   },
+   {
+    "material": "led-rx",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 90416,
+    "normals": 90560,
+    "indices": 90632,
+    "indexBits": 16
+   },
+   {
+    "material": "led-on",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 90704,
+    "normals": 90848,
+    "indices": 90920,
+    "indexBits": 16
+   },
+   {
+    "material": "smd-tan",
+    "vertexCount": 192,
+    "indexCount": 288,
+    "positions": 90992,
+    "normals": 92144,
+    "indices": 92720,
+    "indexBits": 16
+   },
+   {
+    "material": "smd-dark",
+    "vertexCount": 96,
+    "indexCount": 144,
+    "positions": 93296,
+    "normals": 93872,
+    "indices": 94160,
+    "indexBits": 16
+   }
+  ],
+  "esp32": [
+   {
+    "material": "pcb-black",
+    "vertexCount": 96,
+    "indexCount": 228,
+    "positions": 94448,
+    "normals": 95024,
+    "indices": 95312,
+    "indexBits": 16
+   },
+   {
+    "material": "plastic-black",
+    "vertexCount": 120,
+    "indexCount": 180,
+    "positions": 95768,
+    "normals": 96488,
+    "indices": 96848,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 912,
+    "indexCount": 1368,
+    "positions": 97208,
+    "normals": 102680,
+    "indices": 105416,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 1056,
+    "indexCount": 1596,
+    "positions": 108152,
+    "normals": 114488,
+    "indices": 117656,
+    "indexBits": 16
+   },
+   {
+    "material": "module-pcb",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 120848,
+    "normals": 120992,
+    "indices": 121064,
+    "indexBits": 16
+   },
+   {
+    "material": "chip",
+    "vertexCount": 48,
+    "indexCount": 72,
+    "positions": 121136,
+    "normals": 121424,
+    "indices": 121568,
+    "indexBits": 16
+   },
+   {
+    "material": "led-on",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 121712,
+    "normals": 121856,
+    "indices": 121928,
+    "indexBits": 16
+   },
+   {
+    "material": "led-l",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 122000,
+    "normals": 122144,
+    "indices": 122216,
+    "indexBits": 16
+   },
+   {
+    "material": "smd-tan",
+    "vertexCount": 120,
+    "indexCount": 180,
+    "positions": 122288,
+    "normals": 123008,
+    "indices": 123368,
+    "indexBits": 16
+   },
+   {
+    "material": "smd-dark",
+    "vertexCount": 72,
+    "indexCount": 108,
+    "positions": 123728,
+    "normals": 124160,
+    "indices": 124376,
+    "indexBits": 16
+   }
+  ],
+  "breadboard": [
+   {
+    "material": "breadboard",
+    "vertexCount": 152,
+    "indexCount": 324,
+    "positions": 124592,
+    "normals": 125504,
+    "indices": 125960,
+    "indexBits": 16
+   }
+  ],
+  "breadboard-full": [
+   {
+    "material": "breadboard",
+    "vertexCount": 152,
+    "indexCount": 324,
+    "positions": 126608,
+    "normals": 127520,
+    "indices": 127976,
+    "indexBits": 16
+   }
+  ],
+  "ldr": [
+   {
+    "material": "ldr",
+    "vertexCount": 238,
+    "indexCount": 696,
+    "positions": 128624,
+    "normals": 130052,
+    "indices": 130768,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 48,
+    "indexCount": 72,
+    "positions": 132160,
+    "normals": 132448,
+    "indices": 132592,
+    "indexBits": 16
+   }
+  ],
+  "rgb-led": [
+   {
+    "material": "led-milky",
+    "vertexCount": 971,
+    "indexCount": 4260,
+    "positions": 132736,
+    "normals": 138564,
+    "indices": 141480,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 96,
+    "indexCount": 144,
+    "positions": 150000,
+    "normals": 150576,
+    "indices": 150864,
+    "indexBits": 16
+   }
+  ],
+  "tmp36": [
+   {
+    "material": "plastic-black",
+    "vertexCount": 156,
+    "indexCount": 444,
+    "positions": 151152,
+    "normals": 152088,
+    "indices": 152556,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 72,
+    "indexCount": 108,
+    "positions": 153444,
+    "normals": 153876,
+    "indices": 154092,
+    "indexBits": 16
+   }
+  ],
+  "tip120": [
+   {
+    "material": "plastic-black",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 154308,
+    "normals": 154452,
+    "indices": 154524,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 254,
+    "indexCount": 624,
+    "positions": 154596,
+    "normals": 156120,
+    "indices": 156884,
+    "indexBits": 16
+   }
+  ],
+  "motor": [
+   {
+    "material": "metal",
+    "vertexCount": 380,
+    "indexCount": 1104,
+    "positions": 158132,
+    "normals": 160412,
+    "indices": 161552,
+    "indexBits": 16
+   },
+   {
+    "material": "motor-cap",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 163760,
+    "normals": 165212,
+    "indices": 165940,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 48,
+    "indexCount": 72,
+    "positions": 167356,
+    "normals": 167644,
+    "indices": 167788,
+    "indexBits": 16
+   }
+  ],
+  "fan": [
+   {
+    "material": "fan",
+    "vertexCount": 252,
+    "indexCount": 648,
+    "positions": 167932,
+    "normals": 169444,
+    "indices": 170200,
+    "indexBits": 16
+   }
+  ],
+  "stepper": [
+   {
+    "material": "metal",
+    "vertexCount": 740,
+    "indexCount": 2064,
+    "positions": 171496,
+    "normals": 175936,
+    "indices": 178156,
+    "indexBits": 16
+   },
+   {
+    "material": "stepper-cap",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 182284,
+    "normals": 182428,
+    "indices": 182500,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 198,
+    "indexCount": 576,
+    "positions": 182572,
+    "normals": 183760,
+    "indices": 184356,
+    "indexBits": 16
+   }
+  ],
+  "wheel": [
+   {
+    "material": "white",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 185508,
+    "normals": 186960,
+    "indices": 187688,
+    "indexBits": 16
+   },
+   {
+    "material": "red",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 189104,
+    "normals": 189248,
+    "indices": 189320,
+    "indexBits": 16
+   }
+  ],
+  "uln2003": [
+   {
+    "material": "pcb-green",
+    "vertexCount": 96,
+    "indexCount": 228,
+    "positions": 189392,
+    "normals": 189968,
+    "indices": 190256,
+    "indexBits": 16
+   },
+   {
+    "material": "chip",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 190712,
+    "normals": 190856,
+    "indices": 190928,
+    "indexBits": 16
+   },
+   {
+    "material": "led-red",
+    "vertexCount": 96,
+    "indexCount": 144,
+    "positions": 191000,
+    "normals": 191576,
+    "indices": 191864,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 144,
+    "indexCount": 216,
+    "positions": 192152,
+    "normals": 193016,
+    "indices": 193448,
+    "indexBits": 16
+   },
+   {
+    "material": "plastic-black",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 193880,
+    "normals": 194024,
+    "indices": 194096,
+    "indexBits": 16
+   }
+  ],
+  "hc-sr04": [
+   {
+    "material": "pcb",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 194168,
+    "normals": 194312,
+    "indices": 194384,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 644,
+    "indexCount": 1860,
+    "positions": 194456,
+    "normals": 198320,
+    "indices": 200252,
+    "indexBits": 16
+   },
+   {
+    "material": "mesh",
+    "vertexCount": 484,
+    "indexCount": 1416,
+    "positions": 203972,
+    "normals": 206876,
+    "indices": 208328,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 96,
+    "indexCount": 144,
+    "positions": 211160,
+    "normals": 211736,
+    "indices": 212024,
+    "indexBits": 16
+   }
+  ],
+  "oled": [
+   {
+    "material": "pcb",
+    "vertexCount": 112,
+    "indexCount": 276,
+    "positions": 212312,
+    "normals": 212984,
+    "indices": 213320,
+    "indexBits": 16
+   },
+   {
+    "material": "screen",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 213872,
+    "normals": 214016,
+    "indices": 214088,
+    "indexBits": 16
+   },
+   {
+    "material": "gold",
+    "vertexCount": 952,
+    "indexCount": 2784,
+    "positions": 214160,
+    "normals": 219872,
+    "indices": 222728,
+    "indexBits": 16
+   }
+  ],
+  "fsr": [
+   {
+    "material": "fsr",
+    "vertexCount": 266,
+    "indexCount": 744,
+    "positions": 228296,
+    "normals": 229892,
+    "indices": 230692,
+    "indexBits": 16
+   },
+   {
+    "material": "fsr-ring",
+    "vertexCount": 452,
+    "indexCount": 1344,
+    "positions": 232180,
+    "normals": 234892,
+    "indices": 236248,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 48,
+    "indexCount": 72,
+    "positions": 238936,
+    "normals": 239224,
+    "indices": 239368,
+    "indexBits": 16
+   }
+  ],
+  "soil-sensor": [
+   {
+    "material": "pcb-black",
+    "vertexCount": 36,
+    "indexCount": 60,
+    "positions": 239512,
+    "normals": 239728,
+    "indices": 239836,
+    "indexBits": 16
+   },
+   {
+    "material": "chip",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 239956,
+    "normals": 240100,
+    "indices": 240172,
+    "indexBits": 16
+   },
+   {
+    "material": "plastic-white",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 240244,
+    "normals": 240388,
+    "indices": 240460,
+    "indexBits": 16
+   }
+  ],
+  "led": [
+   {
+    "material": "led",
+    "vertexCount": 947,
+    "indexCount": 4170,
+    "positions": 240532,
+    "normals": 246216,
+    "indices": 249060,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 48,
+    "indexCount": 72,
+    "positions": 257400,
+    "normals": 257688,
+    "indices": 257832,
+    "indexBits": 16
+   }
+  ],
+  "resistor": [
+   {
+    "material": "resistor",
+    "vertexCount": 506,
+    "indexCount": 1488,
+    "positions": 257976,
+    "normals": 261012,
+    "indices": 262532,
+    "indexBits": 16
+   },
+   {
+    "material": "band-brown",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 265508,
+    "normals": 266960,
+    "indices": 267688,
+    "indexBits": 16
+   },
+   {
+    "material": "band-black",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 269104,
+    "normals": 270556,
+    "indices": 271284,
+    "indexBits": 16
+   },
+   {
+    "material": "band-red",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 272700,
+    "normals": 274152,
+    "indices": 274880,
+    "indexBits": 16
+   },
+   {
+    "material": "band-gold",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 276296,
+    "normals": 277748,
+    "indices": 278476,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 316,
+    "indexCount": 840,
+    "positions": 279892,
+    "normals": 281788,
+    "indices": 282736,
+    "indexBits": 16
+   }
+  ],
+  "servo": [
+   {
+    "material": "servo",
+    "vertexCount": 426,
+    "indexCount": 1182,
+    "positions": 284416,
+    "normals": 286972,
+    "indices": 288252,
+    "indexBits": 16
+   },
+   {
+    "material": "white",
+    "vertexCount": 234,
+    "indexCount": 684,
+    "positions": 290616,
+    "normals": 292020,
+    "indices": 292724,
+    "indexBits": 16
+   }
+  ],
+  "servo-horn": [
+   {
+    "material": "white",
+    "vertexCount": 490,
+    "indexCount": 1452,
+    "positions": 294092,
+    "normals": 297032,
+    "indices": 298504,
+    "indexBits": 16
+   }
+  ],
+  "buzzer": [
+   {
+    "material": "plastic-black",
+    "vertexCount": 340,
+    "indexCount": 996,
+    "positions": 301408,
+    "normals": 303448,
+    "indices": 304468,
+    "indexBits": 16
+   }
+  ],
+  "knob": [
+   {
+    "material": "pot",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 306460,
+    "normals": 306604,
+    "indices": 306676,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 242,
+    "indexCount": 708,
+    "positions": 306748,
+    "normals": 308200,
+    "indices": 308928,
+    "indexBits": 16
+   }
+  ],
+  "knob-cap": [
+   {
+    "material": "plastic-black",
+    "vertexCount": 998,
+    "indexCount": 2736,
+    "positions": 310344,
+    "normals": 316332,
+    "indices": 319328,
+    "indexBits": 16
+   },
+   {
+    "material": "white",
+    "vertexCount": 24,
+    "indexCount": 36,
+    "positions": 324800,
+    "normals": 324944,
+    "indices": 325016,
+    "indexBits": 16
+   }
+  ],
+  "button": [
+   {
+    "material": "plastic-black",
+    "vertexCount": 992,
+    "indexCount": 2868,
+    "positions": 325088,
+    "normals": 331040,
+    "indices": 334016,
+    "indexBits": 16
+   },
+   {
+    "material": "metal",
+    "vertexCount": 222,
+    "indexCount": 636,
+    "positions": 339752,
+    "normals": 341084,
+    "indices": 341752,
+    "indexBits": 16
+   }
+  ],
+  "button-cap": [
+   {
+    "material": "button-red",
+    "vertexCount": 238,
+    "indexCount": 696,
+    "positions": 343024,
+    "normals": 344452,
+    "indices": 345168,
+    "indexBits": 16
+   }
+  ]
+ },
+ "byteLength": 346560
+}

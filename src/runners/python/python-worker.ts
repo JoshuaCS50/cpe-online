@@ -11,6 +11,7 @@ import type { PausedState } from "../../debugger/types";
 import { waitForInput } from "../input-channel";
 import { PYODIDE_BASE_URL, PYTHON_MAIN_FILE } from "./protocol";
 import type { PythonRunRequest, PythonWorkerMessage } from "./protocol";
+import { workFolderSetup } from "./work-folder";
 
 interface PyProxy {
   set(key: string, value: unknown): void;
@@ -30,6 +31,49 @@ interface Pyodide {
   setStdin(options: { stdin: () => string | null; isatty?: boolean }): void;
   setInterruptBuffer(buffer: Uint8Array): void;
   globals: { get(name: string): () => PyProxy };
+  /** Emscripten's in-memory file system. */
+  FS: {
+    mkdirTree(path: string): void;
+    readdir(path: string): string[];
+    writeFile(path: string, data: string): void;
+    readFile(path: string, options: { encoding: "utf8" }): string;
+    unlink(path: string): void;
+    stat(path: string): { mode: number };
+    isFile(mode: number): boolean;
+  };
+}
+
+/** The folder a program runs in; open("data.txt") looks here. */
+const WORK_DIR = "/home/pyodide/work";
+
+/** Plain files directly inside the working folder. */
+function workFiles(pyodide: Pyodide): string[] {
+  return pyodide.FS.readdir(WORK_DIR).filter(
+    (name) => name !== "." && name !== ".." && pyodide.FS.isFile(pyodide.FS.stat(`${WORK_DIR}/${name}`).mode),
+  );
+}
+
+/** Empties the working folder, fills it with the run's files and makes it the current folder. */
+function prepareFiles(pyodide: Pyodide, files: Record<string, string>): void {
+  pyodide.FS.mkdirTree(WORK_DIR);
+  for (const name of workFiles(pyodide)) pyodide.FS.unlink(`${WORK_DIR}/${name}`);
+  for (const [name, text] of Object.entries(files)) {
+    if (!name.includes("/")) pyodide.FS.writeFile(`${WORK_DIR}/${name}`, text);
+  }
+  pyodide.runPython(workFolderSetup(WORK_DIR));
+}
+
+/** Every text file in the working folder after a run. */
+function collectFiles(pyodide: Pyodide): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const name of workFiles(pyodide)) {
+    try {
+      files[name] = pyodide.FS.readFile(`${WORK_DIR}/${name}`, { encoding: "utf8" });
+    } catch {
+      // Not text; leave it out.
+    }
+  }
+  return files;
 }
 
 interface PyodideModule {
@@ -111,9 +155,28 @@ async function run(request: PythonRunRequest): Promise<void> {
     isatty: true,
   });
 
+  const startFiles = request.files ?? {};
+  prepareFiles(pyodide, startFiles);
+
   // A fresh namespace per run: names from the previous run must not leak in.
   const namespace = pyodide.globals.get("dict")();
   namespace.set("__name__", "__main__");
+  let released = false;
+  // Like Python at exit: drop the program's names so files it never closed
+  // are closed (and flushed), then report the files before the run ends,
+  // since the page stops listening at "done".
+  const finishFiles = (): void => {
+    if (released) return;
+    released = true;
+    namespace.destroy();
+    try {
+      pyodide.runPython("import gc\ngc.collect()");
+      const after = collectFiles(pyodide);
+      if (JSON.stringify(after) !== JSON.stringify(startFiles)) post({ type: "files", files: after });
+    } catch {
+      // Reporting files must never hide the program's own result.
+    }
+  };
   try {
     const debug = request.debug;
     if (debug) {
@@ -131,12 +194,14 @@ async function run(request: PythonRunRequest): Promise<void> {
       await pyodide.runPythonAsync(request.code, { globals: namespace, filename: PYTHON_MAIN_FILE });
     }
     await pyodide.runPythonAsync("import sys\nsys.stdout.flush()\nsys.stderr.flush()");
+    finishFiles();
     post({ type: "done" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    finishFiles();
     post({ type: "error", message, interrupted: /KeyboardInterrupt/.test(message) });
   } finally {
-    namespace.destroy();
+    if (!released) namespace.destroy();
   }
 }
 

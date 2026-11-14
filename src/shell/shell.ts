@@ -9,11 +9,18 @@ import { createDebugView } from "../debugger/debug-view";
 import { explainError } from "../diagnostics/engine";
 import { createErrorCard } from "../diagnostics/error-card";
 import type { ErrorExplanation, RawError } from "../diagnostics/types";
-import type { FileRecord } from "../storage/types";
+import type { AppStore, FileRecord, Settings } from "../storage/types";
 import type { DebugCommand, DebugSession } from "../debugger/types";
 import { createEditor } from "../editor/editor";
 import type { EditorHandle } from "../editor/editor";
 import { createSymbolBar } from "../editor/symbol-bar";
+import { createBoardView } from "../board3d/board-view";
+import { PART_NAMES, openCircuitEditor } from "../board3d/circuit-editor";
+import type { SavedCircuit } from "../board3d/circuit-editor";
+import { resolveCircuitParts } from "../content/circuit";
+import type { BoardView } from "../board3d/board-view";
+import { canRunLive, createLiveChannel } from "../runners/arduino/live";
+import type { BoardReport } from "../runners/arduino/board";
 import { canStop, runProgram } from "../runners/run";
 import { debugCInWorker } from "../runners/c/c-runner";
 import { canBlockForInput } from "../runners/input-channel";
@@ -27,6 +34,8 @@ import { createEditorTabs } from "./editor-tabs";
 import { createExamplesView } from "./examples-view";
 import { createExplorer } from "./explorer";
 import { icon } from "./icons";
+import { createModeSwitch } from "./mode-switch";
+import type { Mode } from "./mode-switch";
 import { createReferenceView } from "./reference-view";
 import { createSettingsView } from "./settings-view";
 import { openWorkspace } from "./workspace";
@@ -37,7 +46,7 @@ type View = "files" | "code" | "terminal";
 /** What the side panel is showing. */
 type SideView = "files" | "examples" | "reference" | "settings";
 
-const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java", matlab: "MATLAB" };
+const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", arduino: "Arduino", python: "Python", java: "Java", matlab: "MATLAB", text: "Text" };
 
 function currentTier(): Tier {
   if (window.matchMedia("(max-width: 599px)").matches) return "phone";
@@ -45,7 +54,21 @@ function currentTier(): Tier {
   return "laptop";
 }
 
-export async function bootShell(): Promise<void> {
+/** What the rest of the app may ask of the IDE shell. */
+export interface ShellHandle {
+  store: AppStore;
+  getSettings(): Settings;
+  /** Applies and saves a change to the settings. */
+  updateSettings(patch: Partial<Settings>): void;
+  onSettingsChange(listener: (settings: Settings) => void): void;
+  /** Switches the page between the IDE and the lessons. */
+  setMode(mode: Mode): void;
+  /** Adds a file to the explorer and opens it. */
+  /** Adds the code as a new file and shows it. Data files are added too, unless a file of that name exists. */
+  openInEditor(fileName: string, code: string, dataFiles?: Record<string, string>): Promise<void>;
+}
+
+export async function bootShell(): Promise<ShellHandle> {
   const root = document.documentElement;
   root.dataset.mode = "code";
 
@@ -82,6 +105,7 @@ export async function bootShell(): Promise<void> {
       el("span", { class: "brand-mark", "aria-hidden": "true" }, [">_"]),
       el("span", { class: "brand-name" }, ["cpe-online"]),
     ]),
+    createModeSwitch("code"),
     pathEl,
     el("div", { class: "title-actions" }, [runButton, debugButton, debugControls, stopButton]),
   ]);
@@ -161,18 +185,74 @@ export async function bootShell(): Promise<void> {
   const problemsCount = el("span", { class: "panel-count" });
   const terminalTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Terminal"]);
   const problemsTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Problems", problemsCount]);
+  // A third tab for sketches: the 3D board replaying the last run. Built the first time it is shown.
+  const boardTab = el("button", { type: "button", class: "panel-tab", role: "tab" }, ["Board"]);
+  boardTab.hidden = true;
+  // Each sketch can have a circuit of its own, built in the circuit editor and kept on the device.
+  const circuits = new Map<string, SavedCircuit>();
+  const circuitKey = (fileId: string): string => `circuit.file.${fileId}`;
+  async function loadCircuit(fileId: string): Promise<SavedCircuit> {
+    const known = circuits.get(fileId);
+    if (known) return known;
+    const stored = (await store.getValue(circuitKey(fileId))) as SavedCircuit | undefined;
+    const saved = stored && Array.isArray(stored.parts) ? stored : { board: "uno" as const, parts: [] };
+    circuits.set(fileId, saved);
+    return saved;
+  }
+  const boardLabel = el("span", { class: "board-panel-label" });
+  const editCircuitButton = button({ label: "Edit circuit", icon: "pencil", showLabel: true, class: "btn btn-outline", onClick: () => void editCircuit() });
+  const boardBar = el("div", { class: "board-panel-bar" }, [editCircuitButton, boardLabel]);
+  const boardPanel = el("div", { class: "board-panel" }, [boardBar]);
+  let boardView: BoardView | null = null;
+  function ensureBoard(): BoardView {
+    if (!boardView) {
+      boardView = createBoardView();
+      boardView.element.classList.add("board3d-fill");
+      boardPanel.append(boardView.element);
+      void applyCircuit();
+    }
+    return boardView;
+  }
+  /** Shows the active sketch's circuit on the board. */
+  async function applyCircuit(): Promise<SavedCircuit | null> {
+    const file = workspace.activeFile;
+    if (!file || file.language !== "arduino") return null;
+    const saved = await loadCircuit(file.id);
+    if (workspace.activeFile?.id !== file.id) return saved;
+    const { circuit, problems } = resolveCircuitParts(saved.parts, saved.board);
+    boardView?.setCircuit(saved.board, problems.length === 0 ? circuit : null);
+    const names = saved.parts.map((part) => PART_NAMES[part.part]);
+    boardLabel.textContent = `${saved.board === "esp32" ? "ESP32 DevKit" : "Arduino Uno"}${names.length ? ` · ${names.length} ${names.length === 1 ? "part" : "parts"}` : " · no parts yet"}`;
+    return saved;
+  }
+  async function editCircuit(): Promise<void> {
+    const file = workspace.activeFile;
+    if (!file || file.language !== "arduino") return;
+    const saved = await loadCircuit(file.id);
+    openCircuitEditor(document.body, saved, (next) => {
+      circuits.set(file.id, next);
+      void store.setValue(circuitKey(file.id), next).catch(console.warn);
+      showPanelTab("board");
+      void applyCircuit();
+    });
+  }
   terminalTab.addEventListener("click", () => showPanelTab("terminal"));
   problemsTab.addEventListener("click", () => showPanelTab("problems"));
+  boardTab.addEventListener("click", () => showPanelTab("board"));
 
+  // The panel can sit under the editor or beside it; the button moves it to the other place.
+  const panelSideButton = el("button", { type: "button", class: "btn btn-icon btn-quiet panel-side" });
+  panelSideButton.addEventListener("click", () => updateSettings({ panelSide: settings.panelSide === "right" ? "bottom" : "right" }));
   const panel = el("section", { class: "panel", "aria-label": "Terminal and problems" }, [
     el("div", { class: "panel-header" }, [
-      el("div", { class: "panel-tabs", role: "tablist" }, [terminalTab, problemsTab]),
+      el("div", { class: "panel-tabs", role: "tablist" }, [terminalTab, problemsTab, boardTab]),
       el("div", { class: "panel-actions" }, [
+        panelSideButton,
         button({ label: "Copy output", icon: "copy", class: "btn btn-icon btn-quiet", onClick: () => void copyOutput() }),
         button({ label: "Clear terminal", icon: "eraser", class: "btn btn-icon btn-quiet", onClick: () => consoleIO.clear() }),
       ]),
     ]),
-    el("div", { class: "panel-body" }, [outputEl, problemsEl, debugPane]),
+    el("div", { class: "panel-body" }, [outputEl, problemsEl, boardPanel, debugPane]),
   ]);
 
   const main = el("main", { class: "main" }, [editorPane, splitter, panel]);
@@ -267,14 +347,22 @@ export async function bootShell(): Promise<void> {
   applyTier();
   window.addEventListener("resize", applyTier);
 
-  // Terminal height: drag the splitter, or use the arrow keys on it.
+  // Panel size: drag the splitter, or use the arrow keys on it. Height under the editor, width beside it.
+  const besideEditor = (): boolean => shell.dataset.panelSide === "right" && root.dataset.tier !== "phone";
   function setPanelHeight(px: number): void {
     const max = Math.max(120, main.clientHeight - 120);
     shell.style.setProperty("--panel-h", `${Math.round(Math.min(max, Math.max(96, px)))}px`);
   }
+  function setPanelWidth(px: number): void {
+    const max = Math.max(260, main.clientWidth - 260);
+    shell.style.setProperty("--panel-w", `${Math.round(Math.min(max, Math.max(240, px)))}px`);
+  }
   splitter.addEventListener("pointerdown", (event) => {
     splitter.setPointerCapture(event.pointerId);
-    const move = (moveEvent: PointerEvent): void => setPanelHeight(main.getBoundingClientRect().bottom - moveEvent.clientY);
+    const move = (moveEvent: PointerEvent): void => {
+      if (besideEditor()) setPanelWidth(main.getBoundingClientRect().right - moveEvent.clientX);
+      else setPanelHeight(main.getBoundingClientRect().bottom - moveEvent.clientY);
+    };
     const end = (): void => {
       splitter.removeEventListener("pointermove", move);
       splitter.removeEventListener("pointerup", end);
@@ -285,6 +373,12 @@ export async function bootShell(): Promise<void> {
     splitter.addEventListener("pointercancel", end);
   });
   splitter.addEventListener("keydown", (event) => {
+    if (besideEditor()) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      setPanelWidth(panel.getBoundingClientRect().width + (event.key === "ArrowLeft" ? 24 : -24));
+      return;
+    }
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
     setPanelHeight(panel.getBoundingClientRect().height + (event.key === "ArrowUp" ? 24 : -24));
@@ -338,7 +432,20 @@ export async function bootShell(): Promise<void> {
   let settings = await loadSettings(store);
   const systemLight = window.matchMedia("(prefers-color-scheme: light)");
 
+  function applyPanelSide(): void {
+    const side = settings.panelSide;
+    shell.dataset.panelSide = side;
+    splitter.setAttribute("aria-orientation", side === "right" ? "vertical" : "horizontal");
+    splitter.setAttribute("aria-label", side === "right" ? "Resize panel width" : "Resize terminal");
+    const label = side === "right" ? "Move the panel under the editor" : "Move the panel to the right of the editor";
+    panelSideButton.replaceChildren(icon(side === "right" ? "layoutBottom" : "layoutRight"));
+    panelSideButton.setAttribute("aria-label", label);
+    panelSideButton.title = label;
+  }
+
   function applySettings(): void {
+    applyPanelSide();
+    // Both modes follow the theme: Learn is paper when light and night paper when dark.
     const light = settings.theme === "light" || (settings.theme === "auto" && systemLight.matches);
     root.dataset.theme = light ? "light" : "dark";
     // The editor's syntax colours are keyed on this class.
@@ -348,16 +455,17 @@ export async function bootShell(): Promise<void> {
     outputEl.classList.toggle("no-wrap", !settings.outputWrap);
   }
 
-  createSettingsView(sideSection("settings"), {
-    settings,
-    onChange: (patch) => {
-      settings = { ...settings, ...patch };
-      applySettings();
-      // Save the whole object, not the patch: two quick changes would
-      // otherwise each merge into the old stored value and one would be lost.
-      void saveSettings(store, settings).catch(console.warn);
-    },
-  });
+  const settingsListeners: ((settings: Settings) => void)[] = [];
+  function updateSettings(patch: Partial<Settings>): void {
+    settings = { ...settings, ...patch };
+    applySettings();
+    settingsView.sync(settings);
+    for (const listener of settingsListeners) listener(settings);
+    // Save the whole object, not the patch: two quick changes would
+    // otherwise each merge into the old stored value and one would be lost.
+    void saveSettings(store, settings).catch(console.warn);
+  }
+  const settingsView = createSettingsView(sideSection("settings"), { settings, onChange: updateSettings });
   systemLight.addEventListener("change", applySettings);
   applySettings();
   showSideView("files");
@@ -365,8 +473,12 @@ export async function bootShell(): Promise<void> {
   function syncEditor(): void {
     const file = workspace.activeFile;
     editorPane.classList.toggle("is-empty", file === null);
-    runButton.disabled = running || file === null;
+    // A data file is read by programs, not run.
+    runButton.disabled = running || file === null || file.language === "text";
     debugButton.disabled = running || !canDebug(file?.language);
+    boardTab.hidden = file?.language !== "arduino";
+    if (boardTab.hidden && shell.dataset.panelTab === "board") showPanelTab("terminal");
+    if (!boardTab.hidden) void applyCircuit();
     if (!file) {
       loadedFileId = null;
       pathEl.textContent = "";
@@ -376,7 +488,8 @@ export async function bootShell(): Promise<void> {
     pathEl.textContent = `~/${workspace.project.name.toLowerCase().replace(/\s+/g, "-")}/${file.name}`;
     languageChip.textContent = LANGUAGE_LABELS[file.language] ?? file.language;
     symbolBar.setLanguage(file.language);
-    if (file.id !== loadedFileId) {
+    // A program may also have rewritten the open file with fopen.
+    if (file.id !== loadedFileId || editor.getDoc() !== file.doc) {
       loading = true;
       loadedFileId = file.id;
       editor.setDoc(file.doc);
@@ -397,12 +510,13 @@ export async function bootShell(): Promise<void> {
 
   /** Python pauses by sleeping on shared memory, so it needs cross-origin isolation. */
   function canDebug(language: string | undefined): boolean {
-    return language === "c" || language === "cpp" || (language === "python" && canBlockForInput());
+    // C++ runs on a real compiler, which has no step debugger here yet.
+    return language === "c" || (language === "python" && canBlockForInput());
   }
 
   function setRunning(next: boolean, language?: string): void {
     running = next;
-    runButton.disabled = next || workspace.activeFile === null;
+    runButton.disabled = next || workspace.activeFile === null || workspace.activeFile.language === "text";
     debugButton.disabled = next || !canDebug(workspace.activeFile?.language);
     stopButton.disabled = !next || !canStop(language);
     shell.dataset.running = String(next);
@@ -425,10 +539,12 @@ export async function bootShell(): Promise<void> {
   }
   let problems: Problem[] = [];
 
-  function showPanelTab(tab: "terminal" | "problems"): void {
+  function showPanelTab(tab: "terminal" | "problems" | "board"): void {
     shell.dataset.panelTab = tab;
     terminalTab.setAttribute("aria-selected", String(tab === "terminal"));
     problemsTab.setAttribute("aria-selected", String(tab === "problems"));
+    boardTab.setAttribute("aria-selected", String(tab === "board"));
+    if (tab === "board") ensureBoard();
   }
 
   function jumpToProblem(problem: Problem): void {
@@ -469,7 +585,7 @@ export async function bootShell(): Promise<void> {
     const explanation = explainError(raw, file.doc);
     const problem: Problem = { explanation, fileId: file.id, fileName: file.name };
     if (explanation.line !== null && workspace.activeFile?.id === file.id) editor.highlightErrorLine(explanation.line);
-    const card = createErrorCard(explanation, { fileName: file.name, onJump: () => jumpToProblem(problem) });
+    const card = createErrorCard(explanation, { fileName: file.name, onJump: () => jumpToProblem(problem), kid: settings.kidMode });
     consoleIO.appendElement(card);
     // The terminal follows new output to the bottom; a card is read from its top.
     card.scrollIntoView({ block: "start" });
@@ -479,6 +595,21 @@ export async function bootShell(): Promise<void> {
 
   renderProblems();
   showPanelTab("terminal");
+
+  /** Every file in the project, for fopen: a program can read any of them. */
+  function programFiles(): Record<string, string> {
+    return Object.fromEntries(workspace.files.map((file) => [file.name, file.doc]));
+  }
+
+  /** Keeps what the program wrote and says so in the terminal. */
+  async function saveWrittenFiles(written: Record<string, string>): Promise<void> {
+    try {
+      const names = await workspace.saveProgramFiles(written);
+      if (names.length) consoleIO.writeInfo(`\n[saved ${names.join(", ")} in the explorer]\n`);
+    } catch (error) {
+      consoleIO.writeErr(`\nCould not save the files the program wrote: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
 
   async function debug(): Promise<void> {
     const file = workspace.activeFile;
@@ -516,6 +647,8 @@ export async function bootShell(): Promise<void> {
       breakpoints: breakpointsByFile.get(file.id) ?? [],
       onErrorLine: (line) => editor.highlightErrorLine(line),
       onError: (text) => reportError(file, { language: file.language, text }),
+      files: programFiles(),
+      onFiles: (written) => void saveWrittenFiles(written),
       listener: {
         onPaused: (state) => {
           if (workspace.activeFile?.id !== debugFileId && debugFileId !== null) workspace.open(debugFileId);
@@ -560,6 +693,13 @@ export async function bootShell(): Promise<void> {
     runChip.textContent = `Running ${file.name}`;
     abort = new AbortController();
     let outcome = "Finished";
+    // A sketch runs live when the browser allows it: the Board tab shows it and its parts can be used.
+    // A sketch runs on its own circuit's board (the Uno unless the circuit says ESP32).
+    const sketchBoard = file.language === "arduino" ? ((await applyCircuit())?.board ?? "uno") : "uno";
+    const liveChannel = file.language === "arduino" && canRunLive() ? createLiveChannel() : null;
+    const session = liveChannel ? ensureBoard().startLive(sketchBoard, liveChannel, file.doc) : null;
+    if (session) showPanelTab("board");
+    let finalReport: BoardReport | null = null;
     try {
       const result = await runProgram({
         language: file.language,
@@ -568,6 +708,19 @@ export async function bootShell(): Promise<void> {
         consoleIO,
         signal: abort.signal,
         onError: (error) => reportError(file, error),
+        files: programFiles(),
+        onFiles: (written) => void saveWrittenFiles(written),
+        // A sketch that changed pins is replayed on the board; its Serial output stays in the terminal.
+        sim: liveChannel ? { runMs: 30 * 60_000, live: liveChannel, board: sketchBoard } : { board: sketchBoard },
+        onLive: session ? (events, t, modes, reads) => session.changes(events, t, modes, reads) : undefined,
+        onBoard: (report) => {
+          if (session) {
+            finalReport = report;
+            return;
+          }
+          ensureBoard().show(report, file.doc);
+          if (report.events.length > 0) showPanelTab("board");
+        },
       });
       if (result.stopped) outcome = "Stopped";
       else if (!result.ok) outcome = "Failed";
@@ -575,6 +728,7 @@ export async function bootShell(): Promise<void> {
       consoleIO.writeErr("\n" + (error instanceof Error ? error.message : String(error)) + "\n");
       outcome = "Failed";
     } finally {
+      session?.end(finalReport);
       abort = null;
       setRunning(false);
       consoleIO.resetInput();
@@ -629,6 +783,8 @@ export async function bootShell(): Promise<void> {
   // ───── Keyboard ─────
 
   window.addEventListener("keydown", (event) => {
+    // These shortcuts belong to the IDE; the lessons have their own buttons.
+    if (root.dataset.mode !== "code") return;
     const command = event.ctrlKey || event.metaKey;
     if (event.key === "F5" && event.shiftKey) {
       event.preventDefault();
@@ -673,4 +829,22 @@ export async function bootShell(): Promise<void> {
   if (import.meta.env.DEV) {
     (window as unknown as { __cpe: unknown }).__cpe = { editor, workspace, store, consoleIO };
   }
+
+  return {
+    store,
+    getSettings: () => settings,
+    updateSettings,
+    onSettingsChange: (listener) => void settingsListeners.push(listener),
+    setMode(mode) {
+      root.dataset.mode = mode;
+      applySettings();
+    },
+    async openInEditor(fileName, code, dataFiles = {}) {
+      const taken = new Set(workspace.files.map((existing) => existing.name));
+      await workspace.saveProgramFiles(Object.fromEntries(Object.entries(dataFiles).filter(([name]) => !taken.has(name))));
+      const file = await workspace.addFile(fileName, code);
+      workspace.open(file.id);
+      revealEditor();
+    },
+  };
 }

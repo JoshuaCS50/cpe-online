@@ -1,0 +1,225 @@
+/* The 3D board panel. Colours come from the theme tokens, so it follows
+   paper, dark Learn and the Code themes. */
+
+.board3d {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-height: 0;
+}
+
+.board3d-stage {
+  position: relative;
+  height: clamp(240px, 42vh, 420px);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  /* Behind the 3D floor: a little lighter at the top, like a room. */
+  background: linear-gradient(var(--bg-2), var(--bg-3));
+  touch-action: none;
+}
+
+.board3d-fill .board3d-stage {
+  flex: 1;
+  height: auto;
+  min-height: 180px;
+}
+
+.board3d-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.board3d-canvas:active {
+  cursor: grabbing;
+}
+
+.board3d-notice {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--s-4);
+  color: var(--ink-dim);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+/* Labels that follow the parts: a dot on the part, the name beside it. */
+.board3d-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.board3d-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -6px 0 0 -6px;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* display above would beat the hidden attribute: Labels off, or behind the camera. */
+.board3d-label[hidden] {
+  display: none;
+}
+
+.board3d-label-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid var(--bg-2);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+/* Labels look hand-written on a scrap of paper, to match the sketchbook drawing. */
+.board3d-label-text {
+  padding: 1px 7px 2px;
+  border: 1.5px solid var(--ink);
+  border-radius: 9px 4px 8px 3px;
+  background: var(--bg-2);
+  box-shadow: 1.5px 1.5px 0 var(--ink);
+  color: var(--ink);
+  font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", "Comic Neue", cursive;
+  font-size: 11.5px;
+  font-weight: 700;
+  transform: rotate(-1.5deg);
+}
+
+/* View controls float in the top corner of the stage. */
+.board3d-toolbar {
+  position: absolute;
+  top: var(--s-2);
+  right: var(--s-2);
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  box-shadow: var(--shadow);
+}
+
+.board3d-tool {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 var(--s-2);
+  color: var(--ink);
+  font-size: var(--fs-xs);
+}
+
+.board3d-tool:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.board3d-labels-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.board3d-player {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.board3d-play {
+  min-width: 96px;
+}
+
+.board3d-scrubber {
+  flex: 1;
+  min-width: 60px;
+  accent-color: var(--accent);
+}
+
+.board3d-clock {
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.board3d-speed {
+  min-width: 44px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.board3d-status {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+:root[data-tier="phone"] .board3d-clock {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .board3d-tool {
+    min-width: var(--tap);
+    min-height: var(--tap);
+  }
+}
+
+/* Live runs: inputs to hold and turn. */
+.board3d-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.board3d-live-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--err);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  animation: board3d-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes board3d-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.board3d-hold {
+  touch-action: none;
+  user-select: none;
+}
+
+.board3d-hold[data-down="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.board3d-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-sm);
+}
+
+.board3d-slider input {
+  width: 140px;
+  accent-color: var(--accent);
+}

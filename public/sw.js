@@ -24,17 +24,17 @@ const sameOrigin = (url) => url.origin === self.location.origin;
 
 /**
  * Runtime files whose URL changes with every version, so a cached copy is
- * always right: the MATLAB runtime (in a folder named after its version) and
- * Python from its CDN (version in the path).
+ * always right: the MATLAB runtime and the C++ compiler (each in a folder
+ * named after its version) and Python from its CDN (version in the path).
  */
 function isPinnedRuntime(url) {
-  if (sameOrigin(url)) return /\/vendor\/runmat\/[^/]+\//.test(url.pathname);
+  if (sameOrigin(url)) return /\/vendor\/(runmat|clang)\/[^/]+\//.test(url.pathname);
   return url.hostname === "cdn.jsdelivr.net" && url.pathname.includes("/pyodide/");
 }
 
-/** Runtime files that keep their name across versions: the C interpreter and the MATLAB manifest. */
+/** Runtime files that keep their name across versions: the C interpreter, the MATLAB manifest and the 3D board models. */
 function isUnpinnedRuntime(url) {
-  return sameOrigin(url) && url.pathname.includes("/vendor/");
+  return sameOrigin(url) && (url.pathname.includes("/vendor/") || url.pathname.includes("/models/"));
 }
 
 self.addEventListener("install", (event) => {

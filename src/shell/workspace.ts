@@ -37,6 +37,12 @@ export interface Workspace {
   updateDoc(id: string, doc: string): void;
   /** Writes pending edits now. */
   flush(): Promise<void>;
+  /**
+   * Saves what a program wrote with fopen: changed files get the new text,
+   * new names become files in the project (not opened). Returns the names
+   * that were created or changed.
+   */
+  saveProgramFiles(written: Record<string, string>): Promise<string[]>;
 }
 
 function newId(): string {
@@ -195,6 +201,29 @@ export async function openWorkspace(store: AppStore): Promise<Workspace> {
       saveTimer = setTimeout(() => void flush().catch(console.warn), SAVE_DELAY_MS);
     },
     flush,
+    async saveProgramFiles(written) {
+      const changed: string[] = [];
+      const now = Date.now();
+      for (const [rawName, doc] of Object.entries(written)) {
+        const name = rawName.trim().replace(/[\\/]/g, "-");
+        if (!name) continue;
+        const existing = files.find((file) => file.name === name);
+        if (existing) {
+          if (existing.doc === doc) continue;
+          existing.doc = doc;
+          existing.savedAt = now;
+          dirty.delete(existing.id);
+          await store.putFile(existing);
+        } else {
+          const file: FileRecord = { id: newId(), projectId: current.id, name, language: languageFromFilename(name), doc, createdAt: now, savedAt: now };
+          await store.putFile(file);
+          files = [...files, file];
+        }
+        changed.push(name);
+      }
+      if (changed.length) notify();
+      return changed;
+    },
   };
   return workspace;
 }

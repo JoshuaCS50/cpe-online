@@ -86,6 +86,28 @@
   --shadow: 0 12px 32px rgb(20 35 63 / 0.18);
 }
 
+/* Learn mode in the dark uses the Code side's colours, so switching modes
+   keeps the same look. Only the shapes (rounded cards, outlines) differ. */
+:root[data-mode="learn"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --bg-2: #141820;
+  --bg-3: #1b212c;
+  --line: #262d3a;
+  --line-strong: #37404f;
+  --ink: #d8dee9;
+  --ink-dim: #98a2b3;
+  --ink-faint: #6b7586;
+  --accent: #5fd38d;
+  --accent-ink: #06130b;
+  --accent-soft: rgb(95 211 141 / 0.14);
+  --ok: #5fd38d;
+  --warn: #e5c07b;
+  --err: #f2777a;
+  --err-soft: rgb(242 119 122 / 0.16);
+  --shadow: 0 12px 32px rgb(3 6 10 / 0.55);
+}
+
 /* Names the editor and terminal styles already read. */
 :root {
   --text: var(--ink);

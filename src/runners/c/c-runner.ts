@@ -16,6 +16,10 @@ export interface CRunOptions {
    * nothing about the error itself and leaves the explanation to the caller.
    */
   onError?: (text: string) => void;
+  /** Files the program may open, name -> text. */
+  files?: Record<string, string>;
+  /** Receives every file after a run that created or changed any. */
+  onFiles?: (files: Record<string, string>) => void;
 }
 
 export interface CDebugOptions extends CRunOptions {
@@ -94,6 +98,9 @@ function execute(
           );
         }
         break;
+      case "files":
+        options.onFiles?.(message.files);
+        break;
       case "done":
         consoleIO.writeInfo(`\n[program exited with code ${message.exitCode}]\n`);
         finish({ ok: message.exitCode === 0, exitCode: message.exitCode }, true);
@@ -138,7 +145,7 @@ export function runCInWorker(options: CRunOptions): Promise<DebugResult> {
   return execute(
     options,
     () => {},
-    (input) => ({ type: "run", code: options.code, stdin: options.consoleIO.drainBuffer(), input }),
+    (input) => ({ type: "run", code: options.code, stdin: options.consoleIO.drainBuffer(), input, files: options.files }),
   ).finished;
 }
 
@@ -162,6 +169,7 @@ export function debugCInWorker(options: CDebugOptions): DebugSession {
       stdin: options.consoleIO.drainBuffer(),
       input,
       breakpoints,
+      files: options.files,
     }),
   );
 

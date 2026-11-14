@@ -20,6 +20,8 @@ export interface PythonRunRequest {
   input: SharedArrayBuffer | null;
   /** One shared byte; the page writes 2 (SIGINT) to interrupt running code. Null without isolation. */
   interrupt: SharedArrayBuffer | null;
+  /** Files the program may open, name -> text, placed in its working folder. */
+  files?: Record<string, string>;
   /** Present for a debug session. */
   debug?: {
     breakpoints: number[];
@@ -38,6 +40,8 @@ export type PythonWorkerMessage =
   | { type: "stderr"; text: string }
   | { type: "stdin-request" }
   | { type: "paused"; state: PausedState }
+  /** Every file in the working folder after the run, sent before "done" or "error" when any changed. */
+  | { type: "files"; files: Record<string, string> }
   | { type: "done" }
   | { type: "error"; message: string; interrupted: boolean }
   | { type: "load-failed"; message: string };

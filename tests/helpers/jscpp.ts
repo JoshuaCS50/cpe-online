@@ -36,7 +36,7 @@ export interface InteractiveRun {
  * entry of `lines` (a newline is appended). When `lines` runs out, requests
  * get end-of-input.
  */
-export function runCInteractive(code: string, lines: readonly string[]): InteractiveRun {
+export function runCInteractive(code: string, lines: readonly string[], files?: Record<string, string>): InteractiveRun {
   const jscpp = loadJscpp();
   const remaining = [...lines];
   let stdout = "";
@@ -52,6 +52,8 @@ export function runCInteractive(code: string, lines: readonly string[]): Interac
         return next === undefined ? null : next + "\n";
       },
     },
+    // The patched build reads and writes files in this object.
+    files,
   });
   return { stdout, requests, unused: remaining };
 }
@@ -60,12 +62,13 @@ export function runCInteractive(code: string, lines: readonly string[]): Interac
  * Starts `code` under JSCPP's debugger and returns the raw debugger object
  * plus a way to read what the program has printed so far.
  */
-export function debugC(code: string, lines: readonly string[] = []): { debuggerObject: unknown; stdout: () => string } {
+export function debugC(code: string, lines: readonly string[] = [], files?: Record<string, string>): { debuggerObject: unknown; stdout: () => string } {
   const jscpp = loadJscpp();
   const remaining = [...lines];
   let stdout = "";
   const debuggerObject = jscpp.run(code, "", {
     debug: true,
+    files,
     stdio: {
       write: (text: string) => {
         stdout += text;
@@ -77,6 +80,30 @@ export function debugC(code: string, lines: readonly string[] = []): { debuggerO
     },
   });
   return { debuggerObject, stdout: () => stdout };
+}
+
+/** Thrown by `runCWithLimit` when a program is still going after its step budget. */
+export class StepLimitError extends Error {
+  constructor(readonly steps: number) {
+    super(`program was still running after ${steps} interpreter steps; it probably loops forever`);
+    this.name = "StepLimitError";
+  }
+}
+
+/**
+ * Runs `code` like `runCInteractive`, but gives up after `maxSteps`
+ * interpreter steps. JSCPP runs synchronously and has no time limit, so
+ * without this a program that loops forever would hang the test run.
+ * `files` is changed in place, as the browser runtime does.
+ */
+export function runCWithLimit(code: string, lines: readonly string[], maxSteps = 2_000_000, files?: Record<string, string>): { stdout: string } {
+  const { debuggerObject, stdout } = debugC(code, lines, files);
+  const dbg = debuggerObject as { next(): unknown };
+  for (let steps = 0; steps < maxSteps; steps += 1) {
+    const result = dbg.next();
+    if (result !== false && result !== undefined) return { stdout: stdout() };
+  }
+  throw new StepLimitError(maxSteps);
 }
 
 /** The untranslated JSCPP error message for `code`, or null if it runs cleanly. */

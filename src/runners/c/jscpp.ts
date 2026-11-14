@@ -11,6 +11,8 @@ export interface JscppConfig {
   debug?: boolean;
   unsigned_overflow?: "error" | "warn" | "ignore";
   includes?: Record<string, unknown>;
+  /** Virtual files for fopen, name -> text. The patched build changes this object in place. */
+  files?: Record<string, string>;
 }
 
 export interface JscppNode {

@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   outputWrap: true,
   seenOnboarding: false,
   dismissedInstallBanner: false,
+  kidMode: false,
+  panelSide: "bottom",
 };
 
 export const FONT_SIZE_MIN = 12;
@@ -37,6 +39,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     outputWrap: flag(source.outputWrap, DEFAULT_SETTINGS.outputWrap),
     seenOnboarding: flag(source.seenOnboarding, DEFAULT_SETTINGS.seenOnboarding),
     dismissedInstallBanner: flag(source.dismissedInstallBanner, DEFAULT_SETTINGS.dismissedInstallBanner),
+    kidMode: flag(source.kidMode, DEFAULT_SETTINGS.kidMode),
+    panelSide: source.panelSide === "right" ? "right" : "bottom",
   };
 }
 

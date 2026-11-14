@@ -189,7 +189,9 @@ describe("file types", () => {
       ["Main.java", "java"],
       ["plot_data.m", "matlab"],
       ["SCRIPT.M", "matlab"],
-      ["notes.txt", "c"],
+      ["notes.txt", "text"],
+      ["readings.CSV", "text"],
+      ["log.dat", "text"],
       ["Makefile", "c"],
       ["archive.tar.py", "python"],
     ];
@@ -197,7 +199,7 @@ describe("file types", () => {
   });
 
   it("gives each language a save extension that maps back to it", () => {
-    for (const language of ["c", "cpp", "python", "java", "matlab"] as const) {
+    for (const language of ["c", "cpp", "python", "java", "matlab", "text"] as const) {
       expect(languageFromFilename(`x.${extensionForLanguage(language)}`)).toBe(language);
     }
   });

@@ -13,6 +13,8 @@ export interface ErrorCardOptions {
   fileName: string;
   /** Called when the user taps the location chip. */
   onJump: (line: number) => void;
+  /** Use the short wording written for young readers. */
+  kid?: boolean;
 }
 
 function section(heading: string, body: (Node | string)[]): HTMLElement {
@@ -33,13 +35,17 @@ export function createErrorCard(explanation: ErrorExplanation, options: ErrorCar
     header.append(chip);
   }
 
+  const kid = options.kid === true;
   const steps = el("ol", { class: "error-steps" });
-  for (const step of explanation.fix) steps.append(el("li", {}, [step]));
+  for (const step of kid ? [explanation.kid.fix] : explanation.fix) steps.append(el("li", {}, [step]));
 
+  // Kid wording is one idea and one step, so it has no separate "Why".
   const card = el("article", { class: "error-card", "data-confidence": explanation.confidence }, [
     header,
-    section(explanation.confidence === "likely" ? "Most likely" : "What happened", [el("p", {}, [explanation.what])]),
-    section("Why", [el("p", {}, [explanation.why])]),
+    section(explanation.confidence === "likely" ? "Most likely" : "What happened", [
+      el("p", {}, [kid ? explanation.kid.what : explanation.what]),
+    ]),
+    ...(kid ? [] : [section("Why", [el("p", {}, [explanation.why])])]),
     section("How to fix it", [steps]),
   ]);
 

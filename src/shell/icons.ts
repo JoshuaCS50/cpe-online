@@ -1,6 +1,23 @@
 // Icons: Tabler outline set, inlined as SVG so they follow the text colour and
 // work offline. One family for the whole app.
 
+import arrowLeft from "@tabler/icons/outline/arrow-left.svg?raw";
+import check from "@tabler/icons/outline/check.svg?raw";
+import chevronRight from "@tabler/icons/outline/chevron-right.svg?raw";
+import externalLink from "@tabler/icons/outline/external-link.svg?raw";
+import moodKid from "@tabler/icons/outline/mood-kid.svg?raw";
+import moon from "@tabler/icons/outline/moon.svg?raw";
+import info from "@tabler/icons/outline/info-circle.svg?raw";
+import layoutRight from "@tabler/icons/outline/layout-sidebar-right.svg?raw";
+import layoutBottom from "@tabler/icons/outline/layout-bottombar.svg?raw";
+import sun from "@tabler/icons/outline/sun.svg?raw";
+import cube from "@tabler/icons/outline/cube.svg?raw";
+import rotate from "@tabler/icons/outline/rotate-clockwise-2.svg?raw";
+import zoomIn from "@tabler/icons/outline/zoom-in.svg?raw";
+import zoomOut from "@tabler/icons/outline/zoom-out.svg?raw";
+import focusCentered from "@tabler/icons/outline/focus-centered.svg?raw";
+import refresh from "@tabler/icons/outline/refresh.svg?raw";
+import school from "@tabler/icons/outline/school.svg?raw";
 import alertTriangle from "@tabler/icons/outline/alert-triangle.svg?raw";
 import stepOver from "@tabler/icons/outline/arrow-bounce.svg?raw";
 import book from "@tabler/icons/outline/book-2.svg?raw";
@@ -32,16 +49,33 @@ import x from "@tabler/icons/outline/x.svg?raw";
 
 const ICONS = {
   alertTriangle,
+  arrowLeft,
   book,
   bug,
   bulb,
+  check,
+  chevronRight,
   code,
   copy,
   database,
   databaseOff,
   download,
   eraser,
+  externalLink,
   fileZip,
+  moodKid,
+  moon,
+  info,
+  layoutRight,
+  layoutBottom,
+  sun,
+  cube,
+  rotate,
+  zoomIn,
+  zoomOut,
+  focusCentered,
+  refresh,
+  school,
   settings,
   upload,
   fileCode,

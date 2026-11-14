@@ -31,7 +31,7 @@ import {
 import { tags } from "@lezer/highlight";
 import "./editor.css";
 
-export type EditorLanguage = "c" | "cpp" | "python" | "java" | "matlab";
+export type EditorLanguage = "c" | "cpp" | "arduino" | "python" | "java" | "matlab";
 
 /** 1-based cursor position, as shown in the status bar. */
 export interface CursorPosition {
@@ -95,13 +95,15 @@ async function loadLanguage(language: string): Promise<Extension> {
       ]);
       return StreamLanguage.define(octave);
     }
+    case "text":
+      return [];
     default:
       return cpp();
   }
 }
 
 function isBundled(language: string): boolean {
-  return language !== "python" && language !== "java" && language !== "matlab";
+  return language !== "python" && language !== "java" && language !== "matlab" && language !== "text";
 }
 
 // ───── Theme: everything is a CSS variable ─────

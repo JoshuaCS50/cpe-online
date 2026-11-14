@@ -14,20 +14,25 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "vendor:runmat": "node scripts/vendor-runmat.mjs",
-    "predev": "npm run vendor:runmat",
-    "prebuild": "npm run vendor:runmat"
+    "predev": "npm run vendor:runmat && npm run vendor:clang",
+    "prebuild": "npm run vendor:runmat && npm run vendor:clang",
+    "vendor:clang": "node scripts/vendor-clang.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
+    "@types/three": "0.186.0",
     "eslint": "^10.14.0",
     "fake-indexeddb": "^6.2.8",
     "fflate": "^0.8.3",
+    "marked": "^18.2.0",
     "pyodide": "^0.26.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -42,8 +47,10 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@lezer/highlight": "^1.2.5",
     "@tabler/icons": "^3.51.0",
+    "@yowasp/clang": "22.0.0-git20542-10",
     "codemirror": "^6.0.2",
     "idb": "^8.0.4",
-    "runmat": "^0.6.2"
+    "runmat": "^0.6.2",
+    "three": "0.186.0"
   }
 }

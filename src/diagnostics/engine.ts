@@ -5,12 +5,13 @@
 // condition all hold wins.
 
 import { C_CATALOG } from "./catalog-c";
+import { CPP_CATALOG } from "./catalog-cpp";
 import { MATLAB_CATALOG } from "./catalog-matlab";
 import { PYTHON_CATALOG } from "./catalog-python";
 import { parseRawError } from "./parse";
 import type { CatalogEntry, ErrorExplanation, Fields, MatchContext, ParsedError, RawError, Text } from "./types";
 
-export const CATALOG: readonly CatalogEntry[] = [...C_CATALOG, ...PYTHON_CATALOG, ...MATLAB_CATALOG];
+export const CATALOG: readonly CatalogEntry[] = [...C_CATALOG, ...CPP_CATALOG, ...PYTHON_CATALOG, ...MATLAB_CATALOG];
 
 function isCode(line: string): boolean {
   const trimmed = line.trim();

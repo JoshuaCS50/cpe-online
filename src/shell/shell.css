@@ -1169,3 +1169,115 @@ kbd {
   box-shadow: inset 0 -2px 0 var(--accent);
   color: var(--ink);
 }
+
+/* ───── Code / Learn switch (shown in both top bars) ───── */
+
+.mode-switch {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mode-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: calc(var(--tap) - 4px);
+  padding: 0 var(--s-3);
+  color: var(--ink-dim);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+}
+
+.mode-link + .mode-link {
+  border-left: 1px solid var(--line-strong);
+}
+
+.mode-link:hover {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+
+.mode-link[aria-current="page"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+
+:root[data-tier="phone"] .mode-link {
+  padding: 0 var(--s-2);
+}
+
+:root[data-tier="phone"] .mode-link > span:not(.icon) {
+  display: none;
+}
+
+/* Only one of the two screens is on the page at a time. */
+:root[data-mode="learn"] .shell {
+  display: none;
+}
+
+:root:not([data-mode="learn"]) .learn {
+  display: none;
+}
+
+/* ───── Board tab (sketches) ───── */
+
+.board-panel {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--s-2);
+  overflow: auto;
+}
+
+.shell[data-panel-tab="board"] .board-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell[data-panel-tab="board"] .output {
+  display: none;
+}
+
+.board-panel .board3d {
+  flex: 1;
+}
+
+.board-panel-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+
+.board-panel-label {
+  color: var(--ink-dim);
+  font-size: var(--fs-sm);
+}
+
+/* ───── Panel beside the editor (Settings, or the button in the panel's header) ───── */
+
+:root:not([data-tier="phone"]) .shell[data-panel-side="right"] .main {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 5px var(--panel-w, 42%);
+}
+
+:root:not([data-tier="phone"]) .shell[data-panel-side="right"][data-panel="closed"] .main {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root:not([data-tier="phone"]) .shell[data-panel-side="right"] .splitter {
+  cursor: col-resize;
+}
+
+:root:not([data-tier="phone"]) .shell[data-panel-side="right"] .panel {
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+
+:root[data-tier="phone"] .panel-side {
+  display: none;
+}

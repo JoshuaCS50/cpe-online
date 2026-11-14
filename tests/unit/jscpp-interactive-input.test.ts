@@ -47,10 +47,22 @@ describe("C input on demand", () => {
     expect(run.stdout).toBe("2.5 hello\n");
   });
 
-  // scanf("%c", &ch) fails with "Memory overflow" in the untouched upstream
-  // bundle too, with all input supplied up front. It is an interpreter bug,
-  // not something the on-demand patch changes; revisit when JSCPP is upgraded.
-  it.todo("scanf %c reads one character");
+  // Upstream stored %c as text into a number type and failed with "Memory
+  // overflow"; scripts/patch-jscpp.mjs stores the character's code instead.
+  it("scanf %c reads one character", () => {
+    const run = runCInteractive(c('    char ch;\n    scanf("%c", &ch);\n    printf("[%c] %d\\n", ch, ch);'), ["A"]);
+    expect(run.stdout).toBe("[A] 65\n");
+  });
+
+  it("scanf reads a number, an operator and a number", () => {
+    const body = ['    double a, b;', '    char op;', '    scanf("%lf %c %lf", &a, &op, &b);', '    printf("%.1f %c %.1f\\n", a, op, b);'].join("\n");
+    expect(runCInteractive(c(body), ["12 + 5"]).stdout).toBe("12.0 + 5.0\n");
+  });
+
+  it("scanf %c fills one element of a char array", () => {
+    const body = ['    char letters[3] = {0};', '    scanf("%c", &letters[1]);', '    printf("%d %c %d\\n", letters[0], letters[1], letters[2]);'].join("\n");
+    expect(runCInteractive(c(body), ["z"]).stdout).toBe("0 z 0\n");
+  });
 
   it("getchar asks only when the buffer is empty", () => {
     const body = ['    int first = getchar();', '    int second = getchar();', '    printf("%c%c\\n", first, second);'].join("\n");
