@@ -41,6 +41,18 @@ export class DeepSleepWake extends Error {
 /** esp_sleep_get_wakeup_cause(): 0 after power-on, 4 after a timer wake-up. */
 const WAKE_TIMER = 4;
 
+/** Interrupt modes, numbered as in Arduino.h (LOW is 0, as for a pin). */
+const IRQ_LOW = 0;
+const IRQ_CHANGE = 1;
+const IRQ_FALLING = 2;
+const IRQ_RISING = 3;
+/** The shortest timer period the simulator runs, in µs; shorter ones would mostly measure the simulator. */
+const MIN_TIMER_MICROS = 100;
+/** Live runs: how long a delay sleeps between looks at the interrupt pins, in ms. */
+const LIVE_IRQ_SLICE_MS = 2;
+/** Live runs: the most timer interrupts caught up in one go after the page was slow. */
+const LIVE_TIMER_CATCH_UP = 50;
+
 /** One change on the board, at a time in ms. */
 export interface BoardEvent {
   t: number;
@@ -178,6 +190,16 @@ export class VirtualBoard {
   /** Live runs: the shared inputs, real-time start, changes not yet sent, and the last value seen on each pin. */
   private readonly live: { view: Int32Array; start: number; sent: number; lastFlush: number; onChanges: NonNullable<BoardOptions["live"]>["onChanges"] } | null;
   private readonly liveSeen = new Map<number, number>();
+  /** Interrupts: the sketch's cpe_isr export, whether a routine is running, whether interrupts are on. */
+  private callIsr: ((slot: number) => void) | null = null;
+  private inIsr = false;
+  private irqEnabled = true;
+  /** Pins with an interrupt attached: the routine's slot, the mode, and the level last seen. */
+  private readonly attached = new Map<number, { slot: number; mode: number; level: number }>();
+  /** Routines that came due while interrupts were off; they run when interrupts() turns them on. */
+  private readonly pendingIsrs = new Set<number>();
+  /** Timer interrupts by routine slot: the period, when it is next due, and whether it repeats. */
+  private readonly timers = new Map<number, { periodMs: number; next: number; repeat: boolean }>();
 
   constructor(options: BoardOptions) {
     this.runMs = options.runMs;
@@ -196,6 +218,7 @@ export class VirtualBoard {
   private liveTick(): void {
     const live = this.live!;
     this.time = Math.min(this.runMs, performance.now() - live.start);
+    this.serviceLiveInterrupts();
     if (this.time - live.lastFlush >= LIVE_FLUSH_MS) this.flushLive();
     if (liveStopped(live.view) || this.time >= this.runMs) {
       this.flushLive();
@@ -248,9 +271,102 @@ export class VirtualBoard {
     return { digital: [...this.digitalReads].sort((a, b) => a - b), analog: [...this.analogReads].sort((a, b) => a - b) };
   }
 
-  /** The running program's memory, for RTC variables kept through deep sleep. */
-  useMemory(memory: WebAssembly.Memory): void {
+  /** The running program: its memory (RTC variables, screen text) and its interrupt entry point. */
+  useInstance(memory: WebAssembly.Memory, instance?: WebAssembly.Instance): void {
     this.memory = memory;
+    const isr = instance?.exports.cpe_isr;
+    this.callIsr = typeof isr === "function" ? (isr as (slot: number) => void) : null;
+  }
+
+  // ───── Interrupts ─────
+
+  /** A pin's level as the sketch would read it, without counting it as a read. */
+  private levelOf(pin: number): number {
+    const given = this.inputValue(pin);
+    if (given !== undefined) return given ? 1 : 0;
+    if (this.modes[pin] === OUTPUT) return this.outputs[pin] ?? 0;
+    return this.modes[pin] === INPUT_PULLUP ? 1 : 0;
+  }
+
+  /** Runs an interrupt routine now, or keeps it for later while interrupts are off. */
+  private fire(slot: number): void {
+    if (!this.callIsr) return;
+    if (!this.irqEnabled || this.inIsr) {
+      this.pendingIsrs.add(slot);
+      return;
+    }
+    this.inIsr = true;
+    try {
+      this.callIsr(slot);
+    } finally {
+      this.inIsr = false;
+    }
+  }
+
+  /** Checks each interrupt pin for a change since it was last looked at, and runs the routines that match. */
+  private checkInterruptPins(): void {
+    for (const [pin, irq] of this.attached) {
+      const level = this.levelOf(pin);
+      if (level === irq.level) continue;
+      irq.level = level;
+      const matches = irq.mode === IRQ_CHANGE || (irq.mode === IRQ_RISING && level === 1) || ((irq.mode === IRQ_FALLING || irq.mode === IRQ_LOW) && level === 0);
+      if (matches) this.fire(irq.slot);
+    }
+  }
+
+  /** Runs the timer routines due by now. */
+  private runDueTimers(limit = Infinity): void {
+    for (const [slot, timer] of this.timers) {
+      let runs = 0;
+      while (timer.next <= this.time && this.timers.get(slot) === timer) {
+        if (runs++ >= limit) {
+          timer.next = this.time + timer.periodMs;
+          break;
+        }
+        if (timer.repeat) timer.next += timer.periodMs;
+        else this.timers.delete(slot);
+        this.fire(slot);
+      }
+    }
+  }
+
+  /**
+   * Replays: moves the clock to each moment up to `end` when an interrupt pin
+   * changes or a timer is due, and runs the routines there, so an interrupt
+   * happens at the board time it would on a real board, even in a long delay.
+   */
+  private runInterruptsUntil(end: number): void {
+    if (!this.callIsr || this.inIsr || (this.attached.size === 0 && this.timers.size === 0)) return;
+    for (;;) {
+      let next = Infinity;
+      for (const pin of this.attached.keys()) {
+        const input = this.inputs.find((candidate) => candidate.pin === pin && candidate.at > this.time);
+        if (input && input.at <= end) next = Math.min(next, input.at);
+      }
+      for (const timer of this.timers.values()) if (timer.next <= end) next = Math.min(next, timer.next);
+      if (next === Infinity) return;
+      this.time = Math.max(this.time, next);
+      this.runDueTimers();
+      this.checkInterruptPins();
+    }
+  }
+
+  /** Live runs: interrupt pins and timers, checked whenever the clock is looked at. */
+  private serviceLiveInterrupts(): void {
+    if (!this.callIsr || this.inIsr || (this.attached.size === 0 && this.timers.size === 0)) return;
+    this.runDueTimers(LIVE_TIMER_CATCH_UP);
+    this.checkInterruptPins();
+  }
+
+  /** The pin an interrupt number means: on an Uno 0 is pin 2 and 1 is pin 3; an ESP32 uses the GPIO number. */
+  private interruptPin(number: number, what: string): number | undefined {
+    if (this.profile.id === "esp32") return this.checkPin(number, what) ? number : undefined;
+    const pin = number === 0 ? 2 : number === 1 ? 3 : undefined;
+    if (pin === undefined) {
+      const hint = number === 2 || number === 3 ? ` To use pin ${number}, write ${what}(digitalPinToInterrupt(${number}), ...).` : " Only pins 2 and 3 can interrupt; wire the button to one of them.";
+      this.warn(`irq-${number}`, `${what}(${number}, ...): an Uno has interrupt 0 (pin 2) and interrupt 1 (pin 3), so nothing is attached.${hint}`);
+    }
+    return pin;
   }
 
   /**
@@ -286,6 +402,10 @@ export class VirtualBoard {
       }
     }
     this.modes.fill(-1);
+    this.attached.clear();
+    this.timers.clear();
+    this.pendingIsrs.clear();
+    this.irqEnabled = true;
     this.ledcBits.clear();
     this.adcBits = this.profile.adcBits;
     this.serialBegun = false;
@@ -327,13 +447,25 @@ export class VirtualBoard {
 
   /** Moves the clock; ends the program when the run time is used up. */
   private advance(ms: number): void {
+    // Inside an interrupt routine the clock stands still, as millis() does on a real board.
+    if (this.inIsr) return;
     if (this.live) {
       // A live delay really waits, but wakes at once if the page presses Stop.
-      if (ms >= 1) liveSleep(this.live.view, ms);
+      // With interrupts attached it waits in short slices, looking at the pins in between.
+      const slices = this.attached.size > 0 || this.timers.size > 0;
+      if (slices && ms >= 1) {
+        const until = performance.now() + ms;
+        for (let left = ms; left > 0; left = until - performance.now()) {
+          liveSleep(this.live.view, Math.min(LIVE_IRQ_SLICE_MS, left));
+          this.liveTick();
+        }
+      } else if (ms >= 1) liveSleep(this.live.view, ms);
       this.liveTick();
       return;
     }
-    this.time += ms;
+    const target = this.time + ms;
+    this.runInterruptsUntil(Math.min(target, this.runMs));
+    this.time = Math.max(this.time, target);
     if (this.time >= this.runMs) {
       this.time = this.runMs;
       throw new WasiExit(0);
@@ -492,7 +624,41 @@ export class VirtualBoard {
         return this.time;
       },
       delay: (ms: number) => {
+        if (this.inIsr) {
+          this.warn("isr-delay", "delay() was called inside an interrupt routine. On a real board the clock stops while a routine runs, so delay() there never ends or does nothing. Keep routines short: set a flag and do the slow work in loop().");
+          return;
+        }
         this.advance(Math.max(0, ms));
+      },
+      // ───── Interrupts ─────
+      attach_interrupt: (number: number, mode: number, slot: number) => {
+        const pin = this.interruptPin(number, "attachInterrupt");
+        if (pin === undefined) return;
+        if (mode === IRQ_LOW) this.warn("irq-low", "attachInterrupt with LOW: on a real board the routine runs again and again for as long as the pin stays LOW. The simulator runs it once each time the pin goes LOW. FALLING is usually what you want.");
+        this.digitalReads.add(pin);
+        this.attached.set(pin, { slot, mode, level: this.levelOf(pin) });
+      },
+      detach_interrupt: (number: number) => {
+        const pin = this.interruptPin(number, "detachInterrupt");
+        if (pin !== undefined) this.attached.delete(pin);
+      },
+      interrupts_on: (on: number) => {
+        this.irqEnabled = on !== 0;
+        if (!this.irqEnabled) return;
+        const due = [...this.pendingIsrs];
+        this.pendingIsrs.clear();
+        for (const slot of due) this.fire(slot);
+      },
+      timer_start: (slot: number, periodMicros: number, repeat: number) => {
+        let micros = periodMicros;
+        if (!(micros >= MIN_TIMER_MICROS)) {
+          this.warn("timer-fast", `A timer interrupt every ${Math.round(periodMicros)} µs is faster than the simulator runs timers; it runs every ${MIN_TIMER_MICROS} µs instead.`);
+          micros = MIN_TIMER_MICROS;
+        }
+        this.timers.set(slot, { periodMs: micros / 1000, next: this.time + micros / 1000, repeat: repeat !== 0 });
+      },
+      timer_stop: (slot: number) => {
+        this.timers.delete(slot);
       },
       loop_end: () => {
         if (this.live) {
@@ -525,6 +691,7 @@ export class VirtualBoard {
         this.events.push({ t: this.time, pin, kind: "screen", value: 0, text });
       },
       serial_used: () => {
+        if (this.inIsr) this.warn("isr-serial", "Serial is printed to inside an interrupt routine. It works for a few characters, but on a real board it can freeze once the send buffer fills, because sending needs interrupts. Set a flag in the routine and print in loop().");
         const speed = esp32 ? "115200" : "9600";
         if (!this.serialBegun) this.warn("serial", `Serial is printed to before Serial.begin(${speed}) was called. On a real board nothing would appear in the Serial Monitor.`);
       },

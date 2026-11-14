@@ -349,9 +349,9 @@ export function compileLesson(source: string, file: string): Lesson {
         problems.push("check file-equals only works in C and Python lessons; C++ and MATLAB programs cannot write files here yet");
       }
       // Board inputs and pin checks only mean something for sketches.
-      const boardCheck = check.type === "pins" || (check.type === "stdout-equals" && (check.inputs !== undefined || check.ms !== undefined));
+      const boardCheck = check.type === "pins" || check.type === "no-board-notes" || (check.type === "stdout-equals" && (check.inputs !== undefined || check.ms !== undefined));
       if (boardCheck && frontmatter.language !== "arduino") problems.push(`check ${check.type}: pins, inputs and ms only work in Arduino lessons`);
-      if ((check.type === "pins" || check.type === "stdout-equals") && check.inputs) {
+      if ((check.type === "pins" || check.type === "no-board-notes" || check.type === "stdout-equals") && check.inputs) {
         for (const input of check.inputs) {
           try {
             parseInput(input, profileOf(frontmatter.board));

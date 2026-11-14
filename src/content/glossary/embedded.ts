@@ -420,6 +420,131 @@ export const EMBEDDED_TERMS: Record<string, GlossaryEntry> = {
     term: "Timing",
     meaning: "Making things happen at the right moments: delays, intervals, timeouts.",
   },
+  fading: {
+    term: "Fading",
+    meaning: "Changing a PWM duty cycle a little at a time, so a light brightens or dims smoothly instead of jumping.",
+    usedFor: "Breathing status lights, dimmers, soft starts for motors and lamps.",
+    code: "brightness += step;\nif (brightness <= 0 || brightness >= 255) step = -step;",
+  },
+  "persistence-of-vision": {
+    term: "Persistence of vision",
+    meaning: "The eye merges flicker faster than about 50 to 90 times a second into steady light.",
+    usedFor: "Why PWM dimming looks smooth, and how LED displays and spinning-LED clocks work.",
+  },
+  "pulse-width": {
+    term: "Pulse width",
+    meaning: "How long a pulse stays HIGH. A servo reads it as an angle: about 1 ms is 0°, 1.5 ms is 90°, 2 ms is 180°, one pulse every 20 ms.",
+    usedFor: "Servos, RC receivers and speed controllers for drones and cars.",
+  },
+  "average-voltage": {
+    term: "Average voltage (PWM)",
+    meaning: "What a PWM pin gives on average: the duty share times the high voltage. Duty 128 of 255 on 5 V is about 2.5 V.",
+    code: "float volts = duty / 255.0 * 5.0;",
+    watchOut: "The pin itself still only gives 0 V or full voltage; only something slow (a motor, an eye, a filter) sees the average.",
+  },
+  blocking: {
+    term: "Blocking code",
+    meaning: "Code that makes the whole sketch wait, such as delay(1000) or a loop that waits for a pin. Nothing else runs meanwhile.",
+    watchOut: "Fine for a sketch that does one thing; as soon as it must also watch a button, use millis() instead.",
+  },
+  "non-blocking": {
+    term: "Non-blocking code",
+    meaning: "Code that never waits: loop() runs round quickly and checks the clock with millis() to decide whether it is time to act.",
+    code: "if (millis() - last >= 500) {\n    last += 500;\n    // act\n}",
+  },
+  multitasking: {
+    term: "Multitasking (cooperative)",
+    meaning: "Doing several jobs on one processor by giving each a short turn, again and again. Each job must finish quickly and never wait.",
+    usedFor: "A board that blinks, reads sensors, updates a screen and answers buttons at the same time.",
+  },
+  rollover: {
+    term: "Rollover",
+    meaning: "A counter going back to 0 after its largest value. millis() rolls over after about 49.7 days.",
+    howTo: "Compare with now - last >= interval (unsigned subtraction survives rollover), not now >= last + interval.",
+  },
+  "state-machine": {
+    term: "State machine",
+    meaning: "A design where a program is always in one of a few named states, and specific events (a press, a timeout) move it to the next.",
+    usedFor: "Traffic lights, washing machines, lifts, vending machines, menus, robot behaviours, communication protocols.",
+    howTo: "Draw the states and arrows first. In code: an enum for the states, a variable for the current one, a switch in loop().",
+  },
+  enum: {
+    term: "enum",
+    meaning: "A type with a fixed list of named values, such as the states of a machine. The names are stored as small whole numbers.",
+    code: "enum State { GO, SLOW, STOP };\nState state = GO;",
+  },
+  timer: {
+    term: "Timer (hardware)",
+    meaning: "A counter inside the microcontroller that ticks with the clock on its own, whatever the program does. Timers make millis(), PWM, tone() and servo pulses.",
+    watchOut: "Two features that need the same timer clash: on an Uno, tone() upsets PWM on pins 3 and 11, and the Servo library upsets PWM on 9 and 10.",
+  },
+  drift: {
+    term: "Drift",
+    meaning: "Timing errors that add up: each late step pushes all later ones back.",
+    howTo: "Move the last time on by exactly one interval (last += interval) instead of setting it to now.",
+  },
+  interrupt: {
+    term: "Interrupt",
+    meaning: "A signal that makes the processor stop what it is doing, run a short routine, and carry on where it left off.",
+    usedFor: "Catching fast or rare events: wheel and flow sensor pulses, rotary encoders, emergency stops, received bytes, timers.",
+  },
+  polling: {
+    term: "Polling",
+    meaning: "Checking an input again and again in a loop. Simple, but it misses anything that happens while the program is busy or waiting.",
+  },
+  isr: {
+    term: "Interrupt service routine (ISR)",
+    meaning: "The function an interrupt runs. It takes nothing and returns nothing.",
+    watchOut: "Keep it short: no delay(), no Serial, and mark the variables it changes volatile.",
+  },
+  "attach-interrupt": {
+    term: "attachInterrupt()",
+    meaning: "Tells the board which routine to run when a pin changes, and which change counts.",
+    code: "attachInterrupt(digitalPinToInterrupt(2), onPress, FALLING);",
+    watchOut: "An Uno can only use pins 2 and 3. Pass digitalPinToInterrupt(pin), not the pin number itself.",
+  },
+  volatile: {
+    term: "volatile",
+    meaning: "Tells the compiler a variable can change behind the program's back (in an interrupt routine), so it must read it from memory every time.",
+    code: "volatile int presses = 0;",
+  },
+  "critical-section": {
+    term: "Critical section",
+    meaning: "A short stretch of code run with interrupts off, so a value shared with a routine is read or changed in one piece.",
+    code: "noInterrupts();\nunsigned long copy = shared;\ninterrupts();",
+  },
+  flag: {
+    term: "Flag",
+    meaning: "A bool that records that something happened, such as a press, so other code can act on it later.",
+    howTo: "The routine sets it; loop() sees it, clears it and does the slow work.",
+  },
+  "interrupt-modes": {
+    term: "Interrupt modes",
+    meaning: "Which change runs the routine: FALLING (HIGH to LOW), RISING (LOW to HIGH) or CHANGE (both).",
+    watchOut: "CHANGE counts each pulse twice. LOW on a real board keeps running the routine while the pin stays LOW.",
+  },
+  "hall-sensor": {
+    term: "Hall-effect sensor",
+    meaning: "A sensor that switches (or gives a voltage) when a magnet comes close.",
+    usedFor: "Wheel and fan speed, door and lid switches, brushless motor positions, flow meters.",
+    howTo: "Open-collector types (A3144) pull the pin LOW near a magnet: use INPUT_PULLUP and count FALLING edges.",
+  },
+  rpm: {
+    term: "RPM",
+    meaning: "Revolutions per minute: how fast something turns.",
+    code: "rpm = pulsesPerSecond * 60 / magnetsPerTurn;",
+  },
+  "timer-interrupt": {
+    term: "Timer interrupt",
+    meaning: "An interrupt raised by a hardware timer at a set period, whatever the main program is doing.",
+    usedFor: "Exact sampling rates, motor stepping, display multiplexing, watchdogs, heartbeat LEDs.",
+    code: "Timer1.initialize(250000);   // µs\nTimer1.attachInterrupt(tick);",
+  },
+  microseconds: {
+    term: "Microseconds (µs)",
+    meaning: "Millionths of a second. 1 ms is 1000 µs; 1 s is 1 000 000 µs.",
+    watchOut: "Timer libraries, micros() and delayMicroseconds() count in µs; millis() and delay() count in ms.",
+  },
   "ultrasonic-sensor": {
     term: "Ultrasonic distance sensor",
     meaning: "Measures distance by sending a burst of sound too high to hear and timing the echo.",

@@ -377,6 +377,35 @@ void loop() {
     expect(flushes).toBeGreaterThan(1);
   }, T);
 
+  it("runs an interrupt in a live run while the sketch sits in a long delay", async () => {
+    const channel = createLiveChannel();
+    const result = await runArduino(
+      `void onPress() {
+  digitalWrite(13, HIGH);
+}
+
+void setup() {
+  pinMode(2, INPUT_PULLUP);
+  pinMode(13, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(2), onPress, FALLING);
+}
+
+void loop() {
+  delay(1000);
+}
+`,
+      {
+        runMs: 300,
+        // The page presses the button as soon as the first changes arrive, about 30 ms in.
+        live: { channel, onChanges: () => setLiveInput(channel, 2, 0) },
+      },
+    );
+    expect(result.error).toBeNull();
+    const [line] = result.timeline;
+    expect(line).toMatch(/^\d+ ms: pin 13 HIGH$/);
+    expect(Number(line!.split(" ")[0])).toBeLessThan(150);
+  }, T);
+
   it("measures distance with an ultrasonic sensor through pulseIn", async () => {
     const result = await runArduino(
       `const int TRIG = 9;
@@ -463,5 +492,117 @@ void loop() {
     );
     expect(result.error).toBeNull();
     expect(result.timeline).toEqual(["0 ms: pin 13 HIGH", "1000 ms: pin 13 LOW", "2000 ms: pin 13 HIGH"]);
+  }, T);
+  it("runs an interrupt routine the moment a button is pressed, even during a long delay", async () => {
+    const result = await runArduino(
+      `const int BUTTON = 2;
+const int LED = 13;
+volatile int presses = 0;
+
+void onPress() {
+  presses++;
+  digitalWrite(LED, presses % 2);
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(BUTTON, INPUT_PULLUP);
+  pinMode(LED, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(BUTTON), onPress, FALLING);
+}
+
+void loop() {
+  delay(5000);
+  Serial.println(presses);
+}
+`,
+      { runMs: 5500, inputs: [parseInput("2 LOW at 300"), parseInput("2 HIGH at 400"), parseInput("2 LOW at 1250"), parseInput("2 HIGH at 1300"), parseInput("2 LOW at 2000")] },
+    );
+    expect(result.error).toBeNull();
+    expect(result.timeline).toEqual(["300 ms: pin 13 HIGH", "1250 ms: pin 13 LOW", "2000 ms: pin 13 HIGH"]);
+    expect(result.serial).toBe("3\n");
+  }, T);
+
+  it("holds interrupts while they are off, and warns about the wrong interrupt number and delay in a routine", async () => {
+    const result = await runArduino(
+      `volatile int count = 0;
+
+void onEdge() {
+  count++;
+  delay(10);
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(3, INPUT_PULLUP);
+  attachInterrupt(2, onEdge, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(3), onEdge, CHANGE);
+  noInterrupts();
+  delay(500);
+  Serial.println(count);
+  interrupts();
+  Serial.println(count);
+}
+
+void loop() {
+}
+`,
+      { runMs: 1000, inputs: [parseInput("3 LOW at 100"), parseInput("3 HIGH at 200")] },
+    );
+    expect(result.error).toBeNull();
+    // Two changes while off are latched as one, as a real interrupt flag is.
+    expect(result.serial).toBe("0\n1\n");
+    expect(result.warnings.join("\n")).toMatch(/attachInterrupt\(2, \.\.\.\): an Uno has interrupt 0 \(pin 2\) and interrupt 1 \(pin 3\).*digitalPinToInterrupt\(2\)/);
+    expect(result.warnings.join("\n")).toMatch(/delay\(\) was called inside an interrupt routine/);
+  }, T);
+
+  it("runs a TimerOne interrupt on an Uno and a hardware timer on an ESP32", async () => {
+    const uno = await runArduino(
+      `#include <TimerOne.h>
+volatile bool on = false;
+
+void tick() {
+  on = !on;
+  digitalWrite(13, on);
+}
+
+void setup() {
+  pinMode(13, OUTPUT);
+  Timer1.initialize(250000);
+  Timer1.attachInterrupt(tick);
+}
+
+void loop() {
+}
+`,
+      { runMs: 1100 },
+    );
+    expect(uno.error).toBeNull();
+    expect(uno.timeline).toEqual(["250 ms: pin 13 HIGH", "500 ms: pin 13 LOW", "750 ms: pin 13 HIGH", "1000 ms: pin 13 LOW"]);
+
+    const esp = await runArduino(
+      `hw_timer_t *timer = nullptr;
+volatile int ticks = 0;
+
+void IRAM_ATTR onTimer() {
+  ticks++;
+}
+
+void setup() {
+  Serial.begin(115200);
+  timer = timerBegin(1000000);
+  timerAttachInterrupt(timer, &onTimer);
+  timerAlarm(timer, 100000, true, 0);
+  delay(1050);
+  Serial.println(ticks);
+}
+
+void loop() {
+}
+`,
+      { runMs: 1200, board: "esp32" },
+    );
+    expect(esp.error).toBeNull();
+    expect(esp.serial).toBe("10\n");
   }, T);
 });

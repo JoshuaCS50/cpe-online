@@ -80,7 +80,11 @@ led, rgb-led, button, knob, ldr, fsr (force), temp-sensor (TMP36), soil-sensor, 
 
 ### What the simulator notes
 
-Output on an input-only pin, a pull-up on GPIO 34 to 39, the flash pins, `analogWrite` on a non-PWM Uno pin, `digitalWrite` without `pinMode(OUTPUT)`, Serial before `Serial.begin`, `ledcWrite` before `ledcAttach`, a PWM frequency too fast for its resolution, `touchRead` or `dacWrite` on the wrong pin, deep sleep without a wake-up.
+Output on an input-only pin, a pull-up on GPIO 34 to 39, the flash pins, `analogWrite` on a non-PWM Uno pin, `digitalWrite` without `pinMode(OUTPUT)`, Serial before `Serial.begin`, `ledcWrite` before `ledcAttach`, a PWM frequency too fast for its resolution, `touchRead` or `dacWrite` on the wrong pin, deep sleep without a wake-up, `attachInterrupt` with a pin number instead of `digitalPinToInterrupt` (Uno), `delay` or `Serial` inside an interrupt routine, a timer faster than 100 µs.
+
+### Interrupts and timers
+
+`attachInterrupt` (RISING, FALLING, CHANGE; LOW runs once per fall), `detachInterrupt`, `noInterrupts`/`interrupts` (an edge while they are off is held and runs when they come back on, as a real interrupt flag does), `TimerOne.h` on the Uno and `timerBegin`/`timerAttachInterrupt`/`timerAlarm` on the ESP32. The board calls the sketch's routine (an exported `cpe_isr`) whenever the clock moves past an input change on an attached pin or a timer tick, at that exact board time, even inside `delay()`. In live runs it looks at the pins every 2 ms during a delay. While a routine runs the clock stands still, as `millis()` does on a real board. A press from the page lasts at least 40 ms, so a quick tap is never missed.
 
 ### Known differences from real boards
 

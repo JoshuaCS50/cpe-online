@@ -35,6 +35,8 @@ export interface LiveSession {
 
 /** A touched pad reads well below the untouched value. */
 const TOUCHED = 15;
+/** The shortest press a live run passes on, in ms: a real finger press lasts longer, and a sketch needs a moment to see it. */
+const MIN_PRESS_MS = 40;
 
 const SPEEDS = [0.25, 1, 4];
 
@@ -168,8 +170,23 @@ export function createBoardView(board: BoardId = "uno", circuit?: Circuit): Boar
   const fullScale = (): number => 2 ** profileOf(live?.board ?? board).adcBits - 1;
   const pinText = (pin: number): string => (live?.board === "esp32" ? pinName(pin, profileOf("esp32")) : `pin ${pinName(pin)}`);
 
+  /** When each pin was last pressed, so a very quick tap still lasts long enough for the sketch to see. */
+  const pressedAt = new Map<number, number>();
+
   /** Presses (or releases) a button or touches a pad, the way its wiring reads it. */
   function press(pin: number, down: boolean, kind: "button" | "touch"): void {
+    if (down) pressedAt.set(pin, performance.now());
+    else {
+      const at = pressedAt.get(pin) ?? 0;
+      const left = MIN_PRESS_MS - (performance.now() - at);
+      if (left > 0) {
+        // Released too soon: let go a little later, unless it was pressed again meanwhile.
+        window.setTimeout(() => {
+          if (pressedAt.get(pin) === at) press(pin, false, kind);
+        }, left);
+        return;
+      }
+    }
     if (kind === "touch") return setInput(pin, down ? TOUCHED : TOUCH_IDLE);
     const pullUp = (plan?.buttonWiring[pin] ?? "pull-up") === "pull-up";
     setInput(pin, pullUp ? (down ? 0 : 1) : down ? 1 : 0);

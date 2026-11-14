@@ -34,6 +34,11 @@ CPE_IMPORT(loop_end) void cpe_loop_end();
 CPE_IMPORT(serial_begin) void cpe_serial_begin(int baud);
 CPE_IMPORT(serial_used) void cpe_serial_used();
 CPE_IMPORT(pulse_in) double cpe_pulse_in(int pin, int state, double timeoutMicros);
+CPE_IMPORT(attach_interrupt) void cpe_attach_interrupt(int number, int mode, int slot);
+CPE_IMPORT(detach_interrupt) void cpe_detach_interrupt(int number);
+CPE_IMPORT(interrupts_on) void cpe_interrupts_on(int on);
+CPE_IMPORT(timer_start) void cpe_timer_start(int slot, double periodMicros, int repeat);
+CPE_IMPORT(timer_stop) void cpe_timer_stop(int slot);
 #ifdef CPE_BOARD_ESP32
 CPE_IMPORT(ledc_attach) int cpe_ledc_attach(int pin, int frequency, int bits);
 CPE_IMPORT(ledc_write) int cpe_ledc_write(int pin, int duty);
@@ -122,6 +127,57 @@ inline void esp_deep_sleep_start() {
   cpe_deep_sleep(cpe_rtc_start(), cpe_rtc_length());
 }
 #endif
+// ───── Interrupts ─────
+// A sketch's interrupt routines go in a table; the board calls cpe_isr(slot)
+// when an attached pin changes or a timer is due. It does that between the
+// sketch's own steps (inside delay, millis, digitalRead and the like), at the
+// board time the change happened, which is as soon as a real board would.
+#define CHANGE 1
+#define FALLING 2
+#define RISING 3
+#define NOT_AN_INTERRUPT -1
+#define IRAM_ATTR
+#define CPE_ISR_SLOTS 16
+static void (*cpe_isrs[CPE_ISR_SLOTS])();
+extern "C" __attribute__((export_name("cpe_isr"))) void cpe_isr(int slot) {
+  if (slot >= 0 && slot < CPE_ISR_SLOTS && cpe_isrs[slot]) cpe_isrs[slot]();
+}
+inline int cpe_isr_slot(void (*fn)()) {
+  for (int i = 0; i < CPE_ISR_SLOTS; i++) if (cpe_isrs[i] == fn) return i;
+  for (int i = 0; i < CPE_ISR_SLOTS; i++) if (!cpe_isrs[i]) { cpe_isrs[i] = fn; return i; }
+  return -1;
+}
+#ifdef CPE_BOARD_ESP32
+inline int digitalPinToInterrupt(int pin) { return pin; }
+#else
+// An Uno has two external interrupts: number 0 on pin 2 and number 1 on pin 3.
+inline int digitalPinToInterrupt(int pin) { return pin == 2 ? 0 : pin == 3 ? 1 : NOT_AN_INTERRUPT; }
+#endif
+inline void attachInterrupt(int number, void (*fn)(), int mode) {
+  int slot = cpe_isr_slot(fn);
+  if (slot >= 0) cpe_attach_interrupt(number, mode, slot);
+}
+inline void detachInterrupt(int number) { cpe_detach_interrupt(number); }
+inline void noInterrupts() { cpe_interrupts_on(0); }
+inline void interrupts() { cpe_interrupts_on(1); }
+
+#ifdef CPE_BOARD_ESP32
+// ESP32 hardware timers (Arduino-ESP32 core 3): timerBegin(ticks per second),
+// timerAttachInterrupt, then timerAlarm(ticks, repeat, 0).
+struct hw_timer_t {
+  uint32_t frequency;
+  int slot;
+};
+inline hw_timer_t *timerBegin(uint32_t frequency) { return new hw_timer_t{frequency ? frequency : 1000000, -1}; }
+inline void timerAttachInterrupt(hw_timer_t *timer, void (*fn)()) { if (timer) timer->slot = cpe_isr_slot(fn); }
+inline void timerAlarm(hw_timer_t *timer, uint64_t alarmValue, bool autoreload, uint64_t reloadCount) {
+  (void)reloadCount;
+  if (timer && timer->slot >= 0) cpe_timer_start(timer->slot, alarmValue * 1000000.0 / timer->frequency, autoreload ? 1 : 0);
+}
+inline void timerStop(hw_timer_t *timer) { if (timer && timer->slot >= 0) cpe_timer_stop(timer->slot); }
+inline void timerEnd(hw_timer_t *timer) { timerStop(timer); delete timer; }
+#endif
+
 inline void tone(int pin, unsigned int frequency, unsigned long duration = 0) { cpe_tone(pin, (int)frequency, (int)duration); }
 inline void noTone(int pin) { cpe_tone(pin, 0, 0); }
 

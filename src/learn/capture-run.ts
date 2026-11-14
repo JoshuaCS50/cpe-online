@@ -68,6 +68,7 @@ export function createProgramRunner(
     let error: string | undefined;
     let filesAfter: Record<string, string> | undefined;
     let pins: string[] | undefined;
+    let notes: string[] | undefined;
     try {
       const result = await runProgram({
         language,
@@ -79,7 +80,10 @@ export function createProgramRunner(
         files: { ...files },
         onFiles: (after) => void (filesAfter = after),
         sim: { runMs: sim?.ms, inputs: sim?.inputs, board },
-        onBoard: (report) => void (pins = report.timeline),
+        onBoard: (report) => {
+          pins = report.timeline;
+          notes = report.warnings;
+        },
       });
       return {
         stdout: consoleIO.stdout(),
@@ -88,6 +92,7 @@ export function createProgramRunner(
         ok: error === undefined && !timedOut && !result.stopped,
         files: filesAfter ?? { ...files },
         ...(pins ? { pins } : {}),
+        ...(notes ? { notes } : {}),
         ...(error ? { error } : {}),
         ...(timedOut ? { timedOut } : {}),
       };

@@ -265,7 +265,7 @@ const arduinoRunner =
   (board: BoardId | undefined): ProgramRunner =>
   async (code, _stdin, sim): Promise<ProgramResult> => {
     const result = await runArduino(code, { runMs: sim?.ms, inputs: (sim?.inputs ?? []).map((input) => parseInput(input, profileOf(board))), board });
-    return { stdout: result.serial, ok: result.error === null, pins: result.timeline, ...(result.error === null ? {} : { error: result.error }) };
+    return { stdout: result.serial, ok: result.error === null, pins: result.timeline, notes: result.warnings, ...(result.error === null ? {} : { error: result.error }) };
   };
 
 function runnerFor(language: Lesson["language"], files: readonly DataFile[], board?: BoardId): ProgramRunner | undefined {

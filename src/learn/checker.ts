@@ -19,6 +19,8 @@ export interface ProgramResult {
   files?: Record<string, string>;
   /** Arduino sketches: the pins over time, one change per line. */
   pins?: string[];
+  /** Arduino sketches: the simulator's notes about the run. */
+  notes?: string[];
 }
 
 /** How an Arduino sketch is run for a check: board time and inputs over time. */
@@ -129,6 +131,15 @@ export async function runChecks(
         if (failure) outcomes.push({ pass: false, title, detail: failure, expected });
         else if (actual === expected) outcomes.push({ pass: true, title });
         else outcomes.push({ pass: false, title, detail: "The pins do not change as the task asks.", expected, actual, actualLabel: "Your board did" });
+        break;
+      }
+      case "no-board-notes": {
+        const result = await runWith([], { ms: check.ms, inputs: check.inputs });
+        const failure = failedRun(result);
+        const notes = result.notes ?? [];
+        if (failure) outcomes.push({ pass: false, title: check.message, detail: failure });
+        else if (notes.length === 0) outcomes.push({ pass: true, title: check.message });
+        else outcomes.push({ pass: false, title: check.message, detail: "The simulator noted something about your sketch.", actual: notes.join("\n"), actualLabel: "It noted" });
         break;
       }
       case "io-cases":

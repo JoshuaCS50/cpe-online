@@ -35,7 +35,7 @@ export function runWasiProgram(
   host: WasiHost,
   extraImports: Record<string, Record<string, (...args: never[]) => unknown>> = {},
   /** Called with the program's memory just before it starts, for imports that read or write it. */
-  onStart?: (memory: WebAssembly.Memory) => void,
+  onStart?: (memory: WebAssembly.Memory, instance: WebAssembly.Instance) => void,
 ): WasiRun {
   let memory: WebAssembly.Memory | null = null;
   const view = (): DataView => new DataView(memory!.buffer);
@@ -150,7 +150,7 @@ export function runWasiProgram(
     wasi_snapshot_preview1: wasi as WebAssembly.ModuleImports,
   });
   memory = instance.exports.memory as WebAssembly.Memory;
-  onStart?.(memory);
+  onStart?.(memory, instance);
   try {
     (instance.exports._start as () => void)();
   } catch (error) {

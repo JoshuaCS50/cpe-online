@@ -37,6 +37,30 @@ export const SKETCH_HEADERS: Record<string, string> = {
   "SPI.h": '#include "Arduino.h"\n',
   "Adafruit_GFX.h": '#include "Arduino.h"\n',
   "Adafruit_SSD1306.h": ssd1306Header,
+  // TimerOne: an interrupt every so many microseconds (Uno Timer1).
+  "TimerOne.h": [
+    "#ifndef CPE_TIMERONE_H",
+    "#define CPE_TIMERONE_H",
+    '#include "Arduino.h"',
+    "class TimerOne {",
+    "  double period = 1000000;",
+    "  int slot = -1;",
+    "  bool running = false;",
+    "public:",
+    "  void initialize(unsigned long microseconds = 1000000) { period = microseconds; }",
+    "  void setPeriod(unsigned long microseconds) { period = microseconds; if (running) start(); }",
+    "  void attachInterrupt(void (*fn)()) { slot = cpe_isr_slot(fn); start(); }",
+    "  void attachInterrupt(void (*fn)(), unsigned long microseconds) { period = microseconds; attachInterrupt(fn); }",
+    "  void detachInterrupt() { stop(); slot = -1; }",
+    "  void start() { if (slot >= 0) { cpe_timer_start(slot, period, 1); running = true; } }",
+    "  void stop() { if (slot >= 0) cpe_timer_stop(slot); running = false; }",
+    "  void restart() { start(); }",
+    "  void resume() { start(); }",
+    "};",
+    "inline TimerOne Timer1;",
+    "#endif",
+    "",
+  ].join("\n"),
 };
 
 export function compileSketch(runClang: RunClang, code: string, board: BoardId = "uno"): Promise<CompileResult> {
@@ -54,7 +78,7 @@ export function runSketch(module: WebAssembly.Module, host: WasiHost, options: B
   // Each wake-up from deep sleep starts the program again with fresh memory, on the same board and clock.
   for (;;) {
     try {
-      const result = runWasiProgram(module, host, { arduino: board.imports() }, (memory) => board.useMemory(memory));
+      const result = runWasiProgram(module, host, { arduino: board.imports() }, (memory, instance) => board.useInstance(memory, instance));
       return { board, exitCode: result.exitCode };
     } catch (error) {
       if (!(error instanceof DeepSleepWake)) throw error;

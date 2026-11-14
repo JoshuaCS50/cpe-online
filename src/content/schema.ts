@@ -56,6 +56,8 @@ export const checkSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("file-equals"), stdin, file: z.string().min(1), expect: z.string() }),
   /** Arduino only: the pins over time must be `expect`, one change per line, such as "500 ms: pin 13 LOW". */
   z.strictObject({ type: z.literal("pins"), inputs, ms, expect: z.string() }),
+  /** Arduino only: the simulator has no notes about the run (no wiring mistakes, no delay or Serial in an interrupt routine). */
+  z.strictObject({ type: z.literal("no-board-notes"), inputs, ms, message: z.string().min(1) }),
 ]);
 export type Check = z.infer<typeof checkSchema>;
 

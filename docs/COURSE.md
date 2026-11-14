@@ -193,7 +193,7 @@ C, C++ and Python, and how to think like a developer. 83 lessons, about 19 hours
 
 ## Arduino and embedded
 
-Pins, sensors and timing on Arduino, ESP32 and PIC boards. 31 lessons, about 8 hours.
+Pins, sensors and timing on Arduino, ESP32 and PIC boards. 43 lessons, about 11 hours.
 
 ### B1 Meet the board
 
@@ -229,15 +229,36 @@ Pins, sensors and timing on Arduino, ESP32 and PIC boards. 31 lessons, about 8 h
 
 ### B4 PWM
 
-_Coming later._
+4 lessons, about 52 minutes.
+
+| # | Lesson | Type | Minutes | Topics |
+|---|---|---|---|---|
+| 1 | [analogWrite and the duty cycle](../src/content/tracks/embedded/b04-pwm/01-analog-write.md) (Uno) | Lesson + circuit | 12 | PWM (pulse-width modulation), Duty cycle, Analog output, Resolution |
+| 2 | [Fading an LED up and down](../src/content/tracks/embedded/b04-pwm/02-fade.md) (Uno) | Lesson + circuit | 12 | PWM (pulse-width modulation), Fading, Persistence of vision, loop() |
+| 3 | [Pulses that set a position or a speed](../src/content/tracks/embedded/b04-pwm/03-servo-sweep.md) (Uno) | Lesson + circuit | 14 | Servo, Pulse width, PWM (pulse-width modulation), Off-by-one error |
+| 4 | [PWM frequency and average voltage](../src/content/tracks/embedded/b04-pwm/04-average-voltage.md) (Uno) | Lesson + circuit | 14 | PWM (pulse-width modulation), Average voltage (PWM), Frequency, Integer division |
 
 ### B5 Timing
 
-_Coming later._
+4 lessons, about 62 minutes.
+
+| # | Lesson | Type | Minutes | Topics |
+|---|---|---|---|---|
+| 1 | [delay versus millis](../src/content/tracks/embedded/b05-timing/01-delay-vs-millis.md) (Uno) | Lesson + circuit | 16 | delay(), millis(), Blocking code, Non-blocking code |
+| 2 | [Several things at once](../src/content/tracks/embedded/b05-timing/02-two-blinkers.md) (Uno) | Lesson + circuit | 14 | millis(), Non-blocking code, Multitasking (cooperative), Rollover |
+| 3 | [State machines](../src/content/tracks/embedded/b05-timing/03-state-machines.md) (Uno) | Lesson + circuit | 18 | State machine, enum, switch, millis() |
+| 4 | [Timers and drift](../src/content/tracks/embedded/b05-timing/04-timers-and-drift.md) (Uno) | Lesson | 14 | Timer (hardware), Drift, millis(), Timing |
 
 ### B6 Interrupts
 
-_Coming later._
+4 lessons, about 64 minutes.
+
+| # | Lesson | Type | Minutes | Topics |
+|---|---|---|---|---|
+| 1 | [What an interrupt is](../src/content/tracks/embedded/b06-interrupts/01-what-is-an-interrupt.md) (Uno) | Lesson + circuit | 16 | Interrupt, Polling, Interrupt service routine (ISR), attachInterrupt() |
+| 2 | [Rules for interrupt routines](../src/content/tracks/embedded/b06-interrupts/02-isr-rules.md) (Uno) | Lesson + circuit | 16 | Interrupt service routine (ISR), volatile, Critical section, Flag |
+| 3 | [Counting pulses from a wheel](../src/content/tracks/embedded/b06-interrupts/03-counting-pulses.md) (Uno) | Lesson + circuit | 16 | Interrupt modes, Hall-effect sensor, RPM, Critical section |
+| 4 | [Timer interrupts](../src/content/tracks/embedded/b06-interrupts/04-timer-interrupts.md) (Uno) | Lesson + circuit | 16 | Timer interrupt, Timer (hardware), Microseconds (µs), Interrupt service routine (ISR) |
 
 ### B7 PIC bridge
 
