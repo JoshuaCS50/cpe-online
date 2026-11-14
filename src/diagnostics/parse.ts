@@ -27,6 +27,22 @@ export function parseCError(text: string): ParsedError {
   return { kind: "internal", message: text.trim(), line: null, column: null };
 }
 
+/**
+ * Real C++ (clang in WebAssembly) reports in three shapes:
+ *   "main.cpp:3:14: error: expected ';' at end of declaration\n..."   (compile)
+ *   "wasm-ld: error: ...: undefined symbol: area(int, int)"            (link)
+ *   "RuntimeError: divide by zero"                                     (a crash while running)
+ */
+export function parseClangError(text: string): ParsedError {
+  const compile = /^[^\n:]+:(\d+):(\d+): (?:fatal )?error: (.*)$/m.exec(text);
+  if (compile) return { kind: "compile", message: (compile[3] ?? "").trim(), line: Number(compile[1]), column: Number(compile[2]) };
+  const link = /wasm-ld: error: .*?(undefined symbol: .*)$/m.exec(text);
+  if (link) return { kind: "link", message: (link[1] ?? "").trim(), line: null, column: null };
+  const crash = /^(?:RuntimeError|RangeError): (.*)$/m.exec(text);
+  if (crash) return { kind: "runtime", message: (crash[1] ?? "").trim(), line: null, column: null };
+  return { kind: "internal", message: text.trim(), line: null, column: null };
+}
+
 /** A Python traceback: the last line is "ExceptionName: message"; the position is the last frame in the user's file. */
 export function parsePythonError(text: string): ParsedError {
   const lines = text.trimEnd().split("\n");
@@ -52,6 +68,7 @@ export function parseRawError(raw: RawError): ParsedError {
     };
   }
   if (raw.language === "python") return parsePythonError(raw.text);
-  if (raw.language === "c" || raw.language === "cpp") return parseCError(raw.text);
+  if (raw.language === "cpp") return parseClangError(raw.text);
+  if (raw.language === "c") return parseCError(raw.text);
   return { kind: "error", message: raw.text.trim(), line: null, column: null };
 }

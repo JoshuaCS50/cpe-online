@@ -9,11 +9,13 @@ import { loadPyodide } from "pyodide";
 import { createInMemoryFsProvider, initRunMat } from "runmat";
 import { beforeAll, describe, expect, it } from "vitest";
 import { C_CATALOG } from "../../src/diagnostics/catalog-c";
+import { CPP_CATALOG } from "../../src/diagnostics/catalog-cpp";
 import { MATLAB_CATALOG } from "../../src/diagnostics/catalog-matlab";
 import { PYTHON_CATALOG } from "../../src/diagnostics/catalog-python";
 import { CATALOG, explainError } from "../../src/diagnostics/engine";
-import { parseCError, parsePythonError } from "../../src/diagnostics/parse";
+import { parseCError, parseClangError, parsePythonError } from "../../src/diagnostics/parse";
 import type { CatalogEntry, RawError } from "../../src/diagnostics/types";
+import { runCpp } from "../helpers/clang";
 import { rawJscppError } from "../helpers/jscpp";
 
 type Runner = (source: string, stdin: string[]) => Promise<RawError | null>;
@@ -21,6 +23,11 @@ type Runner = (source: string, stdin: string[]) => Promise<RawError | null>;
 const runC: Runner = async (source, stdin) => {
   const text = rawJscppError(source, stdin.map((line) => line + "\n").join(""));
   return text === null ? null : { language: "c", text };
+};
+
+const runCppError: Runner = async (source, stdin) => {
+  const result = await runCpp(source, stdin);
+  return result.error === null ? null : { language: "cpp", text: result.error };
 };
 
 let pyodide: Awaited<ReturnType<typeof loadPyodide>>;
@@ -68,7 +75,8 @@ beforeAll(async () => {
 }, 60_000);
 
 const suites: [string, CatalogEntry[], Runner][] = [
-  ["C / C++", C_CATALOG, runC],
+  ["C", C_CATALOG, runC],
+  ["C++", CPP_CATALOG, runCppError],
   ["Python", PYTHON_CATALOG, runPython],
   ["MATLAB", MATLAB_CATALOG, runMatlab],
 ];
@@ -128,6 +136,7 @@ describe("catalog rules", () => {
 
   it("ends each language with a catch-all, so every error gets a card", () => {
     expect(C_CATALOG[C_CATALOG.length - 1]?.id).toBe("c.unknown");
+    expect(CPP_CATALOG[CPP_CATALOG.length - 1]?.id).toBe("cpp.unknown");
     expect(PYTHON_CATALOG[PYTHON_CATALOG.length - 1]?.id).toBe("py.unknown");
     expect(MATLAB_CATALOG[MATLAB_CATALOG.length - 1]?.id).toBe("ml.unknown");
   });
@@ -146,6 +155,13 @@ describe("parsers", () => {
       line: 3,
       column: 5,
     });
+  });
+
+  it("reads clang's compile errors, link errors and crashes", () => {
+    const compile = "main.cpp:3:14: error: expected ';' at end of declaration\n    3 |     int x = 5\n      |              ^\n1 error generated.";
+    expect(parseClangError(compile)).toEqual({ kind: "compile", message: "expected ';' at end of declaration", line: 3, column: 14 });
+    expect(parseClangError("wasm-ld: error: /tmp/main-1.o: undefined symbol: area(int, int)")).toMatchObject({ kind: "link", message: "undefined symbol: area(int, int)", line: null });
+    expect(parseClangError("RuntimeError: divide by zero")).toMatchObject({ kind: "runtime", message: "divide by zero", line: null });
   });
 
   it("reads a JavaScript error from the interpreter as internal", () => {

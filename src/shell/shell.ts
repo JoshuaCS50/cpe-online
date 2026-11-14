@@ -418,7 +418,8 @@ export async function bootShell(): Promise<ShellHandle> {
 
   /** Python pauses by sleeping on shared memory, so it needs cross-origin isolation. */
   function canDebug(language: string | undefined): boolean {
-    return language === "c" || language === "cpp" || (language === "python" && canBlockForInput());
+    // C++ runs on a real compiler, which has no step debugger here yet.
+    return language === "c" || (language === "python" && canBlockForInput());
   }
 
   function setRunning(next: boolean, language?: string): void {

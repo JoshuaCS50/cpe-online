@@ -7,6 +7,7 @@ import type { RawError } from "../diagnostics/types";
 import type { Language } from "../storage/types";
 import type { ConsoleIO } from "../terminal/console";
 import { runCInWorker } from "./c/c-runner";
+import { runCppInWorker } from "./cpp/cpp-runner";
 import { runMatlabInWorker } from "./matlab/matlab-runner";
 import { runPythonInWorker } from "./python/python-runner";
 
@@ -32,8 +33,10 @@ export function canStop(language: string | undefined): boolean {
 export function runProgram(options: RunOptions): Promise<DebugResult> {
   const { language, code, fileName, consoleIO, signal, onError, files, onFiles } = options;
   switch (language) {
-    case "c":
     case "cpp":
+      // Real C++ (clang in WebAssembly). Files are not supported here yet.
+      return runCppInWorker({ code, consoleIO, signal, onError: (text) => onError({ language, text }) });
+    case "c":
       return runCInWorker({ code, consoleIO, signal, files, onFiles, onError: (text) => onError({ language, text }) });
     case "python":
       return runPythonInWorker({ code, consoleIO, signal, files, onFiles, onError: (text) => onError({ language, text }) });

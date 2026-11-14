@@ -12,6 +12,9 @@ dist/
 # MATLAB runtime, copied from node_modules by scripts/vendor-runmat.mjs
 public/vendor/runmat/
 
+# C++ compiler, copied from node_modules by scripts/vendor-clang.mjs
+public/vendor/clang/
+
 # Logs
 *.log
 npm-debug.log*

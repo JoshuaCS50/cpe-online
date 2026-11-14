@@ -7,7 +7,7 @@ import type { ConsoleIO } from "../terminal/console";
 import type { ProgramResult, ProgramRunner } from "./checker";
 
 /** Generous: the first run of Python or MATLAB also downloads its runtime. */
-const TIME_LIMIT_MS: Record<LessonLanguage, number> = { c: 15_000, cpp: 15_000, python: 120_000, matlab: 180_000 };
+const TIME_LIMIT_MS: Record<LessonLanguage, number> = { c: 15_000, cpp: 120_000, python: 120_000, matlab: 180_000 };
 
 interface CaptureConsole extends ConsoleIO {
   stdout(): string;

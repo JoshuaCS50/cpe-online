@@ -6,7 +6,8 @@
 
 import type { CatalogEntry, MatchContext } from "./types";
 
-const C: CatalogEntry["languages"] = ["c", "cpp"];
+// C only: C++ runs on clang, whose messages have their own catalog (catalog-cpp.ts).
+const C: CatalogEntry["languages"] = ["c"];
 
 /** A complete program around `body`, for the tests. Line 3 is the first body line. */
 const main = (body: string, before = ""): string => `#include <stdio.h>\n${before}int main() {\n${body}\n    return 0;\n}\n`;

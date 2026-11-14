@@ -11,6 +11,7 @@ import { allPassed, runChecks } from "../../src/learn/checker";
 import type { ProgramResult, ProgramRunner } from "../../src/learn/checker";
 import { escapeSpacesInStringLiterals } from "../../src/runners/c/prepare-source";
 import { workFolderSetup } from "../../src/runners/python/work-folder";
+import { runCpp } from "../helpers/clang";
 import { StepLimitError, runCWithLimit } from "../helpers/jscpp";
 
 const HEADER = `---
@@ -117,7 +118,7 @@ describe("compileLesson", () => {
     ["a data file without a name", `${HEADER}---${BODY}\n\`\`\`text {role=file}\nx\n\`\`\`\n`, /needs file=<name>/],
     ["a data file name with a folder", `${HEADER}---${BODY}\n\`\`\`text {role=file file=data/x.txt}\nx\n\`\`\`\n`, /needs file=<name>/],
     ["two data files with one name", `${HEADER}---${BODY}\n\`\`\`text {role=file file=x.txt}\na\n\`\`\`\n\n\`\`\`text {role=file file=x.txt}\nb\n\`\`\`\n`, /second data file called x.txt/],
-    ["a file check in a MATLAB lesson", `${HEADER.replace("language: c", "language: matlab")}checks:\n  - {type: file-equals, file: out.txt, expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```matlab")}`, /file-equals only works in C, C\+\+ and Python/],
+    ["a file check in a MATLAB lesson", `${HEADER.replace("language: c", "language: matlab")}checks:\n  - {type: file-equals, file: out.txt, expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```matlab")}`, /file-equals only works in C and Python/],
     ["no kid block", `${HEADER}---\nNormal text.\n`, /no "::: kid" block/],
     ["no explanation", `${HEADER}---\n::: kid\nHi there.\n:::\n`, /no explanation/],
     ["a long kid sentence", `${HEADER}---\nText.\n\n::: kid\nThis sentence just keeps on going and going with far too many words in it.\n:::\n`, /sentence has 15 words/],
@@ -247,8 +248,15 @@ const pythonRunner =
     return { ...result, files };
   };
 
+// C++ lessons compile with the real clang, as in the browser. Files are not supported there yet.
+const cppRunner: ProgramRunner = async (code, stdin): Promise<ProgramResult> => {
+  const result = await runCpp(code, stdin);
+  return { stdout: result.stdout, ok: result.error === null, ...(result.error === null ? {} : { error: result.error }) };
+};
+
 function runnerFor(language: Lesson["language"], files: readonly DataFile[]): ProgramRunner | undefined {
-  if (language === "c" || language === "cpp") return cRunner(files);
+  if (language === "cpp") return cppRunner;
+  if (language === "c") return cRunner(files);
   return language === "python" ? pythonRunner(files) : undefined;
 }
 
@@ -287,18 +295,18 @@ describe("lesson library", () => {
     const outcomes = await runChecks(tryIt.solution.code, tryIt.solution.language, tryIt.checks, run!);
     expect(outcomes.filter((outcome) => !outcome.pass)).toEqual([]);
     expect(allPassed(outcomes)).toBe(true);
-  });
+  }, 60_000);
 
   it.each(withTryIt.map((item) => [item.id, item] as const))("%s: the starter does not pass yet", async (_id, item) => {
     const tryIt = item.tryIt!;
     const outcomes = await runChecks(tryIt.starter.code, tryIt.starter.language, tryIt.checks, runnerFor(tryIt.starter.language, item.files)!);
     expect(allPassed(outcomes)).toBe(false);
-  });
+  }, 60_000);
 
   it.each(library.lessons.filter((item) => item.example).map((item) => [item.id, item] as const))("%s: the example runs without an error", async (_id, item) => {
     const example = item.example!;
     const result = await runnerFor(example.language, item.files)!(example.code, []);
     expect(result.error).toBeUndefined();
     expect(result.stdout.trim().length).toBeGreaterThan(0);
-  });
+  }, 60_000);
 });

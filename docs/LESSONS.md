@@ -79,7 +79,7 @@ Hints are plain text, except that text between backticks is shown as code: `` 'T
 | `io-cases` | every case prints its `expect` | `cases: [{stdin: [...], expect: "..."}]` |
 | `stdout-regex` | the output matches `pattern` | `pattern`, `stdin`, `message` (shown on failure) |
 | `code-contains` | the code (comments removed) matches `pattern` | `pattern`, `message` |
-| `file-equals` | after the run, the file the program wrote holds `expect` (C, C++ and Python; not MATLAB) | `file`, `expect`, `stdin` (optional) |
+| `file-equals` | after the run, the file the program wrote holds `expect` (C and Python; not C++ or MATLAB yet) | `file`, `expect`, `stdin` (optional) |
 
 Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`. A check fails when the program stops with an error or runs too long; the exit code does not matter, so a program may print a message and `return 1` on bad input. `stdin: []` tests what happens when the input ends at once.
 
@@ -98,11 +98,18 @@ Not checked, but expected: one idea per sentence, a concrete picture (a box, a h
 
 ## What the tests run
 
-`tests/unit/content.test.ts` compiles every lesson and then, through the real C and Python runtimes:
+`tests/unit/content.test.ts` compiles every lesson and then, through the real C, C++ and Python runtimes:
 
 - runs each solution against its checks: all must pass;
 - runs each starter: it must not pass;
 - runs each example: it must finish without an error and print something.
+
+C++ lessons (` ```cpp ` blocks, `language: cpp`) are compiled by the real Clang, in the browser and in the tests (`tests/helpers/clang.ts`, which keeps compiled results in `node_modules/.cache/cpe-clang` so only changed programs are compiled again). Things to know:
+
+- Programs are compiled with `-std=c++17 -fno-exceptions -O1`. The C++ library in this build has no exceptions, so lessons cannot use `try`/`catch`, and `vector::at` with a bad position stops the program instead of throwing.
+- C++ programs cannot open files yet, so C++ lessons cannot use `{role=file}` or `file-equals`.
+- There is no step debugger for C++; lessons that need the debugger use C.
+- Error cards for C++ come from `src/diagnostics/catalog-cpp.ts`, matched against clang's real messages.
 
 The C interpreter is stricter than a desktop compiler in places. Known so far:
 
