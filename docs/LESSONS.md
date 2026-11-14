@@ -75,11 +75,14 @@ Hints are plain text, except that text between backticks is shown as code: `` 'T
 
 | Type | Passes when | Fields |
 |---|---|---|
-| `stdout-equals` | the output equals `expect` | `expect`, `stdin` (optional list of input lines) |
+| `stdout-equals` | the output equals `expect` (for a sketch, its Serial output) | `expect`, `stdin` (optional list of input lines); Arduino: `ms`, `inputs` |
 | `io-cases` | every case prints its `expect` | `cases: [{stdin: [...], expect: "..."}]` |
 | `stdout-regex` | the output matches `pattern` | `pattern`, `stdin`, `message` (shown on failure) |
 | `code-contains` | the code (comments removed) matches `pattern` | `pattern`, `message` |
 | `file-equals` | after the run, the file the program wrote holds `expect` (C and Python; not C++ or MATLAB yet) | `file`, `expect`, `stdin` (optional) |
+| `pins` | Arduino only: the pin changes over board time are exactly `expect`, one per line, such as `500 ms: pin 13 LOW` | `expect`, `ms` (board time to run, default 10000), `inputs` (optional) |
+
+**Arduino lessons** (`language: arduino`, ` ```arduino ` blocks, file `sketch.ino`) run on the virtual Uno (`src/runners/arduino`). `inputs` schedules what the board's inputs read, from a time on: `"2 LOW at 500"` (a button on pin 2 pressed at 500 ms), `"A0 512 at 0"` (half the voltage on A0). Pins nobody drives read LOW, or HIGH with `INPUT_PULLUP`. Board time is virtual: `delay()` jumps the clock, a `loop()` that never waits takes 0.01 ms and each `millis()` call 0.001 ms. Timeline lines are `T ms: pin P HIGH|LOW`, `T ms: pin P PWM V`, `T ms: servo on pin P at A degrees`, `T ms: tone on pin P at F Hz`; a pin's line appears only when its value changes, and changes in the same millisecond are listed by pin number, so the order a sketch writes them in does not matter. Simulated button presses can include contact bounce (`"2 LOW at 100", "2 HIGH at 102", "2 LOW at 104"`), so a debounce lesson can check that bounces are not counted. There is no step debugger for sketches, and `Serial.read()` gets nothing yet.
 
 Output is compared after dropping trailing spaces and blank lines at the end. Typed input is not echoed into the output, so a prompt and the answer that follows it sit on one line: `Enter n: Sum = 5`. A check fails when the program stops with an error or runs too long; the exit code does not matter, so a program may print a message and `return 1` on bad input. `stdin: []` tests what happens when the input ends at once.
 

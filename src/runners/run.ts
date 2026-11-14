@@ -7,6 +7,8 @@ import type { RawError } from "../diagnostics/types";
 import type { Language } from "../storage/types";
 import type { ConsoleIO } from "../terminal/console";
 import { runCInWorker } from "./c/c-runner";
+import { parseInput } from "./arduino/board";
+import { DEFAULT_RUN_MS } from "./arduino/sketch";
 import { runCppInWorker } from "./cpp/cpp-runner";
 import { runMatlabInWorker } from "./matlab/matlab-runner";
 import { runPythonInWorker } from "./python/python-runner";
@@ -23,19 +25,33 @@ export interface RunOptions {
   files?: Record<string, string>;
   /** Receives every file after a C run that created or changed any. */
   onFiles?: (files: Record<string, string>) => void;
+  /** Arduino sketches: board time to run (ms) and inputs over time, such as "2 HIGH at 1200". */
+  sim?: { runMs?: number; inputs?: readonly string[] };
+  /** Receives an Arduino sketch's pin timeline and board warnings. */
+  onBoard?: (timeline: string[], warnings: string[]) => void;
 }
 
 /** Languages whose programs the Stop button can end. */
 export function canStop(language: string | undefined): boolean {
-  return language === "c" || language === "cpp" || language === "python" || language === "matlab";
+  return language === "c" || language === "cpp" || language === "arduino" || language === "python" || language === "matlab";
 }
 
 export function runProgram(options: RunOptions): Promise<DebugResult> {
-  const { language, code, fileName, consoleIO, signal, onError, files, onFiles } = options;
+  const { language, code, fileName, consoleIO, signal, onError, files, onFiles, sim, onBoard } = options;
   switch (language) {
     case "cpp":
       // Real C++ (clang in WebAssembly). Files are not supported here yet.
       return runCppInWorker({ code, consoleIO, signal, onError: (text) => onError({ language, text }) });
+    case "arduino":
+      // A sketch: C++ with Arduino.h, run on the virtual board.
+      return runCppInWorker({
+        code,
+        consoleIO,
+        signal,
+        sketch: { runMs: sim?.runMs ?? DEFAULT_RUN_MS, inputs: (sim?.inputs ?? []).map(parseInput) },
+        onBoard,
+        onError: (text) => onError({ language, text }),
+      });
     case "c":
       return runCInWorker({ code, consoleIO, signal, files, onFiles, onError: (text) => onError({ language, text }) });
     case "python":

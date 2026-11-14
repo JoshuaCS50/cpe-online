@@ -17,9 +17,17 @@ export interface ProgramResult {
   timedOut?: boolean;
   /** Every file after the run (C programs), name -> text. */
   files?: Record<string, string>;
+  /** Arduino sketches: the pins over time, one change per line. */
+  pins?: string[];
 }
 
-export type ProgramRunner = (code: string, stdin: readonly string[]) => Promise<ProgramResult>;
+/** How an Arduino sketch is run for a check: board time and inputs over time. */
+export interface SimOptions {
+  ms?: number;
+  inputs?: readonly string[];
+}
+
+export type ProgramRunner = (code: string, stdin: readonly string[], sim?: SimOptions) => Promise<ProgramResult>;
 
 export interface CheckOutcome {
   pass: boolean;
@@ -54,6 +62,10 @@ function describeInput(stdin: readonly string[]): string {
   return stdin.length === 0 ? "no input" : `input ${stdin.map((line) => `"${line}"`).join(", ")}`;
 }
 
+function describeBoardInput(inputs: readonly string[] | undefined): string {
+  return !inputs || inputs.length === 0 ? "nothing pressed" : inputs.join(", ");
+}
+
 function failedRun(result: ProgramResult): string | null {
   if (result.timedOut) return "The program ran for too long and was stopped. Look for a loop that never ends.";
   if (!result.ok) return "The program stopped with an error before it finished.";
@@ -86,11 +98,11 @@ export async function runChecks(
   run: ProgramRunner,
 ): Promise<CheckOutcome[]> {
   const runs = new Map<string, Promise<ProgramResult>>();
-  const runWith = (stdin: readonly string[]): Promise<ProgramResult> => {
-    const key = JSON.stringify(stdin);
+  const runWith = (stdin: readonly string[], sim?: SimOptions): Promise<ProgramResult> => {
+    const key = JSON.stringify([stdin, sim?.ms ?? null, sim?.inputs ?? []]);
     let pending = runs.get(key);
     if (!pending) {
-      pending = run(code, stdin);
+      pending = run(code, stdin, sim);
       runs.set(key, pending);
     }
     return pending;
@@ -100,8 +112,25 @@ export async function runChecks(
   for (const check of checks) {
     switch (check.type) {
       case "stdout-equals":
-        outcomes.push(compareOutput(`Output with ${describeInput(check.stdin)}`, await runWith(check.stdin), check.expect));
+        outcomes.push(
+          compareOutput(
+            check.inputs ? `Serial output with ${describeBoardInput(check.inputs)}` : `Output with ${describeInput(check.stdin)}`,
+            await runWith(check.stdin, { ms: check.ms, inputs: check.inputs }),
+            check.expect,
+          ),
+        );
         break;
+      case "pins": {
+        const result = await runWith([], { ms: check.ms, inputs: check.inputs });
+        const title = `Pins over time with ${describeBoardInput(check.inputs)}`;
+        const failure = failedRun(result);
+        const expected = normalizeOutput(check.expect);
+        const actual = normalizeOutput((result.pins ?? []).join("\n"));
+        if (failure) outcomes.push({ pass: false, title, detail: failure, expected });
+        else if (actual === expected) outcomes.push({ pass: true, title });
+        else outcomes.push({ pass: false, title, detail: "The pins do not change as the task asks.", expected, actual, actualLabel: "Your board did" });
+        break;
+      }
       case "io-cases":
         for (const testCase of check.cases) {
           outcomes.push(compareOutput(`Output with ${describeInput(testCase.stdin)}`, await runWith(testCase.stdin), testCase.expect));

@@ -14,9 +14,10 @@ export const CPP_SOURCE_FILE = "main.cpp";
 /**
  * -fno-exceptions: the C++ library in this build has no exception support,
  * so code that could throw would not link. -O1 keeps compiling quick while
- * removing the slowest code.
+ * removing the slowest code. -I. lets `#include <Servo.h>` find the headers
+ * placed next to the source, as the Arduino IDE finds library headers.
  */
-export const CPP_FLAGS = ["-std=c++17", "-fno-exceptions", "-O1"];
+export const CPP_FLAGS = ["-std=c++17", "-fno-exceptions", "-O1", "-I."];
 
 export interface CompileResult {
   /** The compiled program, or null when compiling failed. */
@@ -25,14 +26,15 @@ export interface CompileResult {
   messages: string;
 }
 
-export async function compileCpp(runClang: RunClang, source: string): Promise<CompileResult> {
+/** `extraFiles` are placed next to the source, for example headers it includes. */
+export async function compileCpp(runClang: RunClang, source: string, extraFiles: Record<string, string> = {}): Promise<CompileResult> {
   let messages = "";
   const decoder = new TextDecoder();
   const collect = (bytes: Uint8Array | null): void => {
     if (bytes) messages += decoder.decode(bytes, { stream: true });
   };
   try {
-    const files = await runClang(["clang++", ...CPP_FLAGS, CPP_SOURCE_FILE, "-o", "main.wasm"], { [CPP_SOURCE_FILE]: source }, {
+    const files = await runClang(["clang++", ...CPP_FLAGS, CPP_SOURCE_FILE, "-o", "main.wasm"], { ...extraFiles, [CPP_SOURCE_FILE]: source }, {
       stdout: collect,
       stderr: collect,
       fetchProgress: () => {},

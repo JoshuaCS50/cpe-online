@@ -10,6 +10,7 @@ const EXTENSIONS: Record<string, Language> = {
   cxx: "cpp",
   hpp: "cpp",
   hh: "cpp",
+  ino: "arduino",
   py: "python",
   java: "java",
   m: "matlab",
@@ -36,6 +37,8 @@ export function extensionForLanguage(language: Language): string {
   switch (language) {
     case "cpp":
       return "cpp";
+    case "arduino":
+      return "ino";
     case "python":
       return "py";
     case "java":

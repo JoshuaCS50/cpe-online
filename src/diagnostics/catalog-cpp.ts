@@ -6,7 +6,8 @@
 
 import type { CatalogEntry } from "./types";
 
-const CPP: CatalogEntry["languages"] = ["cpp"];
+// Arduino sketches are C++ compiled by the same clang, so they share these cards.
+const CPP: CatalogEntry["languages"] = ["cpp", "arduino"];
 
 export const CPP_CATALOG: CatalogEntry[] = [
   {

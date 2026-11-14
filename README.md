@@ -6,11 +6,12 @@ A browser IDE for learning to program. Write, run and debug **C, C++, Python** a
 
 - **Editor** with syntax highlighting, tabs, a file explorer and a row of symbol keys on touch devices.
 - **Runs C** with the [JSCPP](https://github.com/felixhao28/JSCPP) interpreter, **C++** with real Clang compiled to WebAssembly ([@yowasp/clang](https://github.com/YoWASP/clang), about 20 MB compressed), **Python** with [Pyodide](https://pyodide.org/), and **MATLAB** with [RunMat](https://github.com/runmat-org/runmat). Each runtime downloads the first time its language is run. C++ is compiled without exceptions (`-fno-exceptions`), and its programs cannot open files yet.
+- **Arduino sketches** (`.ino`) compile with the same Clang plus an Arduino layer (`src/runners/arduino/Arduino.h`: pins, `delay`, `millis`, `Serial`, `String`, `Servo`) and run on a virtual Uno with a virtual clock. After a run the terminal shows the Serial output, every pin change with its board time, and notes about likely wiring mistakes. A drawn board view comes later.
 - **Terminal like a desktop IDE.** When a program asks for input, type it in the terminal and press Enter. Stop ends a running program.
 - **Files.** C and Python programs can open the files in the explorer (`fopen`, `open`), and what they write appears there as a file you can open. Python can also `import` the other `.py` files. Data files (`.txt`, `.csv`, `.dat` and similar) are edited like code but not run.
 - **Step debugger** for C and Python: breakpoints, step over, into and out, the call stack, and each call's variables with changes highlighted.
 - **Errors explained.** A failed program shows a card saying what went wrong, where, why, and how to fix it, with the original message one click away. A Problems tab lists them.
-- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Eighty-three lessons so far.
+- **Learn mode.** Lessons with an explanation, a runnable example and a task that is checked by running your program. A switch shows every explanation in simple words for young learners. Ninety lessons so far.
 - **Files stay on the device** (IndexedDB), and can be saved to or opened from the device, or exported as one zip.
 - **Examples and a reference sheet** for the CPE150S course.
 - **Dark, light or match-device theme**, adjustable code size.

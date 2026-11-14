@@ -68,7 +68,7 @@ export function parseRawError(raw: RawError): ParsedError {
     };
   }
   if (raw.language === "python") return parsePythonError(raw.text);
-  if (raw.language === "cpp") return parseClangError(raw.text);
+  if (raw.language === "cpp" || raw.language === "arduino") return parseClangError(raw.text);
   if (raw.language === "c") return parseCError(raw.text);
   return { kind: "error", message: raw.text.trim(), line: null, column: null };
 }

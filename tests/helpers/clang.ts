@@ -25,14 +25,18 @@ const CACHE_DIR = join("node_modules", ".cache", "cpe-clang");
 const clangEntry = createRequire(import.meta.url).resolve("@yowasp/clang");
 const clangVersion = (JSON.parse(readFileSync(join(dirname(clangEntry), "..", "package.json"), "utf8")) as { version: string }).version;
 
-async function compileCached(code: string): Promise<CompileResult> {
-  const key = createHash("sha256").update(`${clangVersion}\n${CPP_FLAGS.join(" ")}\n${code}`).digest("hex");
+/** Compiles with the cache. `extraFiles` (such as Arduino.h) are part of the key. */
+export async function compileCppCached(code: string, extraFiles: Record<string, string> = {}): Promise<CompileResult> {
+  const extras = Object.entries(extraFiles)
+    .map(([name, text]) => `${name}\n${text}`)
+    .join("\n");
+  const key = createHash("sha256").update(`${clangVersion}\n${CPP_FLAGS.join(" ")}\n${extras}\n${code}`).digest("hex");
   const wasmFile = join(CACHE_DIR, `${key}.wasm`);
   const messagesFile = join(CACHE_DIR, `${key}.txt`);
   if (existsSync(messagesFile)) {
     return { wasm: existsSync(wasmFile) ? new Uint8Array(readFileSync(wasmFile)) : null, messages: readFileSync(messagesFile, "utf8") };
   }
-  const result = await compileCpp(await loadClang(), code);
+  const result = await compileCpp(await loadClang(), code, extraFiles);
   mkdirSync(CACHE_DIR, { recursive: true });
   if (result.wasm) writeFileSync(wasmFile, result.wasm);
   writeFileSync(messagesFile, result.messages);
@@ -48,7 +52,7 @@ export interface CppRun {
 
 /** Compiles `code` and runs it with `stdin` lines (a newline is added to each). */
 export async function runCpp(code: string, stdin: readonly string[] = []): Promise<CppRun> {
-  const compiled = await compileCached(code);
+  const compiled = await compileCppCached(code);
   if (!compiled.wasm) return { stdout: "", error: compiled.messages || "The compiler stopped without a message.", exitCode: null };
   let stdout = "";
   const remaining = [...stdin];

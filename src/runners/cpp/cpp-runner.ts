@@ -16,6 +16,25 @@ export interface CppRunOptions {
   signal?: AbortSignal;
   /** Receives compiler errors and crashes. When given, the runner prints nothing about the error itself. */
   onError?: (text: string) => void;
+  /** Run the code as an Arduino sketch on the virtual board. */
+  sketch?: CppRunRequest["sketch"];
+  /** Receives the board's pin timeline and warnings after a sketch ran. */
+  onBoard?: (timeline: string[], warnings: string[]) => void;
+}
+
+/** Longest timeline printed in the terminal; the rest is summarised. */
+const TIMELINE_LINES = 60;
+
+function printBoard(consoleIO: ConsoleIO, timeline: string[], warnings: string[], runMs: number): void {
+  const seconds = runMs >= 1000 ? `${runMs / 1000} s` : `${runMs} ms`;
+  if (timeline.length === 0) {
+    consoleIO.writeInfo(`\n--- No pin changed in the first ${seconds} of board time ---\n`);
+  } else {
+    consoleIO.writeInfo(`\n--- Pins over the first ${seconds} of board time ---\n`);
+    consoleIO.writeInfo(timeline.slice(0, TIMELINE_LINES).join("\n") + "\n");
+    if (timeline.length > TIMELINE_LINES) consoleIO.writeInfo(`... and ${timeline.length - TIMELINE_LINES} more changes\n`);
+  }
+  for (const warning of warnings) consoleIO.writeInfo(`Note: ${warning}\n`);
 }
 
 let worker: Worker | null = null;
@@ -88,8 +107,12 @@ export function runCppInWorker(options: CppRunOptions): Promise<DebugResult> {
             );
           }
           break;
+        case "board":
+          printBoard(consoleIO, message.timeline, message.warnings, message.runMs);
+          options.onBoard?.(message.timeline, message.warnings);
+          break;
         case "done":
-          consoleIO.writeInfo(`\n[program exited with code ${message.exitCode}]\n`);
+          if (!options.sketch) consoleIO.writeInfo(`\n[program exited with code ${message.exitCode}]\n`);
           finish({ ok: message.exitCode === 0, exitCode: message.exitCode });
           break;
         case "error":
@@ -117,7 +140,7 @@ export function runCppInWorker(options: CppRunOptions): Promise<DebugResult> {
       return;
     }
     signal?.addEventListener("abort", stop);
-    const request: CppRunRequest = { type: "run", code, stdin: consoleIO.drainBuffer(), input };
+    const request: CppRunRequest = { type: "run", code, stdin: consoleIO.drainBuffer(), input, ...(options.sketch ? { sketch: options.sketch } : {}) };
     active.postMessage(request);
   });
 }

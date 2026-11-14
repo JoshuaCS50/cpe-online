@@ -1,9 +1,9 @@
 // Records kept on the device.
 
 /** "text" is a data file (notes, CSV, logs): editable, readable by programs, not runnable. */
-export type Language = "c" | "cpp" | "python" | "java" | "matlab" | "text";
+export type Language = "c" | "cpp" | "arduino" | "python" | "java" | "matlab" | "text";
 
-export const LANGUAGES: readonly Language[] = ["c", "cpp", "python", "java", "matlab", "text"];
+export const LANGUAGES: readonly Language[] = ["c", "cpp", "arduino", "python", "java", "matlab", "text"];
 
 export function isLanguage(value: unknown): value is Language {
   return typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);

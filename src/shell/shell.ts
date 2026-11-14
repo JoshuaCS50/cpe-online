@@ -39,7 +39,7 @@ type View = "files" | "code" | "terminal";
 /** What the side panel is showing. */
 type SideView = "files" | "examples" | "reference" | "settings";
 
-const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", python: "Python", java: "Java", matlab: "MATLAB", text: "Text" };
+const LANGUAGE_LABELS: Record<string, string> = { c: "C", cpp: "C++", arduino: "Arduino", python: "Python", java: "Java", matlab: "MATLAB", text: "Text" };
 
 function currentTier(): Tier {
   if (window.matchMedia("(max-width: 599px)").matches) return "phone";

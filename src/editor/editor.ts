@@ -31,7 +31,7 @@ import {
 import { tags } from "@lezer/highlight";
 import "./editor.css";
 
-export type EditorLanguage = "c" | "cpp" | "python" | "java" | "matlab";
+export type EditorLanguage = "c" | "cpp" | "arduino" | "python" | "java" | "matlab";
 
 /** 1-based cursor position, as shown in the status bar. */
 export interface CursorPosition {

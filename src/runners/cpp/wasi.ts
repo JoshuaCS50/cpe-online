@@ -29,7 +29,12 @@ export interface WasiRun {
 }
 
 /** Runs a compiled wasm32-wasip1 program to the end. A crash (a WebAssembly trap) is thrown. */
-export function runWasiProgram(module: WebAssembly.Module, host: WasiHost): WasiRun {
+/** `extraImports` supplies other import modules the program uses, by module name. */
+export function runWasiProgram(
+  module: WebAssembly.Module,
+  host: WasiHost,
+  extraImports: Record<string, Record<string, (...args: never[]) => unknown>> = {},
+): WasiRun {
   let memory: WebAssembly.Memory | null = null;
   const view = (): DataView => new DataView(memory!.buffer);
   const bytes = (): Uint8Array => new Uint8Array(memory!.buffer);
@@ -138,7 +143,10 @@ export function runWasiProgram(module: WebAssembly.Module, host: WasiHost): Wasi
     wasi[entry.name] = imports[entry.name] ?? (() => 52); // ENOSYS
   }
 
-  const instance = new WebAssembly.Instance(module, { wasi_snapshot_preview1: wasi as WebAssembly.ModuleImports });
+  const instance = new WebAssembly.Instance(module, {
+    ...(extraImports as Record<string, WebAssembly.ModuleImports>),
+    wasi_snapshot_preview1: wasi as WebAssembly.ModuleImports,
+  });
   memory = instance.exports.memory as WebAssembly.Memory;
   try {
     (instance.exports._start as () => void)();

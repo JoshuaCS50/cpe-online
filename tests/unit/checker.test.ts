@@ -111,6 +111,27 @@ describe("runChecks", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("compares an Arduino sketch's pins over time, with board inputs per run", async () => {
+    const runs: unknown[] = [];
+    const run: ProgramRunner = async (_code, _stdin, sim) => {
+      runs.push(sim);
+      const pressed = sim?.inputs?.length ? ["500 ms: pin 13 HIGH"] : [];
+      return { stdout: "ready\n", ok: true, pins: ["0 ms: pin 13 LOW", ...pressed] };
+    };
+    const checks: Check[] = [
+      { type: "pins", expect: "0 ms: pin 13 LOW\n" },
+      { type: "pins", inputs: ["2 LOW at 500"], ms: 1000, expect: "0 ms: pin 13 LOW\n500 ms: pin 13 HIGH\n" },
+      { type: "pins", inputs: ["2 LOW at 500"], ms: 1000, expect: "0 ms: pin 13 HIGH\n" },
+      { type: "stdout-equals", stdin: [], inputs: ["2 LOW at 500"], ms: 1000, expect: "ready\n" },
+    ];
+    const outcomes = await runChecks("", "arduino", checks, run);
+    expect(outcomes.map((outcome) => outcome.pass)).toEqual([true, true, false, true]);
+    expect(outcomes[1]?.title).toBe("Pins over time with 2 LOW at 500");
+    expect(outcomes[2]).toMatchObject({ detail: "The pins do not change as the task asks.", actualLabel: "Your board did" });
+    // One run without inputs, one with: checks with the same inputs share a run.
+    expect(runs).toHaveLength(2);
+  });
+
   it("compares a file the program wrote, sharing the run with output checks", async () => {
     const { run, calls } = fakeRunner(() => ({ stdout: "saved\n", files: { "log.txt": "1\n2  \n\n" } }));
     const checks: Check[] = [

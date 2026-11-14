@@ -11,6 +11,7 @@
 // Stop ends the worker, which is the only way to end a program in a loop.
 
 import { waitForInput } from "../input-channel";
+import { compileSketch, runSketch } from "../arduino/sketch";
 import { compileCpp } from "./compile";
 import type { RunClang } from "./compile";
 import type { ClangManifest, CppRunRequest, CppWorkerMessage } from "./protocol";
@@ -25,7 +26,7 @@ const baseUrl = scope.name;
 let clangPromise: Promise<RunClang> | null = null;
 
 /** The most recently compiled program, reused when the same code runs again. */
-let lastProgram: { source: string; module: WebAssembly.Module; warnings: string } | null = null;
+let lastProgram: { key: string; module: WebAssembly.Module; warnings: string } | null = null;
 
 /** Fetches a split file's parts in order, reporting progress, and joins them. */
 async function fetchJoined(url: (file: string) => string, entry: ClangManifest["split"][string], progress: (bytes: number) => void): Promise<Uint8Array> {
@@ -120,15 +121,16 @@ async function run(request: CppRunRequest): Promise<void> {
   }
 
   // The checker runs the same code once per test input: compile it once.
-  let program = lastProgram?.source === request.code ? lastProgram : null;
+  const key = `${request.sketch ? "sketch" : "cpp"}\n${request.code}`;
+  let program = lastProgram?.key === key ? lastProgram : null;
   if (!program) {
     post({ type: "compiling" });
-    const compiled = await compileCpp(runClang, request.code);
+    const compiled = request.sketch ? await compileSketch(runClang, request.code) : await compileCpp(runClang, request.code);
     if (!compiled.wasm) {
       post({ type: "error", stage: "compile", message: compiled.messages || "The compiler stopped without a message." });
       return;
     }
-    program = { source: request.code, module: await WebAssembly.compile(compiled.wasm as BufferSource), warnings: compiled.messages };
+    program = { key, module: await WebAssembly.compile(compiled.wasm as BufferSource), warnings: compiled.messages };
     lastProgram = program;
   }
   if (program.warnings) post({ type: "warnings", text: program.warnings });
@@ -136,8 +138,8 @@ async function run(request: CppRunRequest): Promise<void> {
   let queued = request.stdin;
   try {
     const module = program.module;
-    const result = runWasiProgram(module, {
-      write: (_fd, text) => post({ type: "stdout", text }),
+    const host = {
+      write: (_fd: 1 | 2, text: string) => post({ type: "stdout", text }),
       readMore: () => {
         if (queued) {
           const text = queued;
@@ -146,7 +148,14 @@ async function run(request: CppRunRequest): Promise<void> {
         }
         return request.input ? waitForInput(request.input, () => post({ type: "stdin-request" })) : null;
       },
-    });
+    };
+    if (request.sketch) {
+      const { board, exitCode } = runSketch(module, host, request.sketch);
+      post({ type: "board", timeline: board.timeline(), warnings: board.warnings, runMs: board.runMs });
+      post({ type: "done", exitCode });
+      return;
+    }
+    const result = runWasiProgram(module, host);
     post({ type: "done", exitCode: result.exitCode });
   } catch (error) {
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);

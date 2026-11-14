@@ -11,6 +11,8 @@ import { allPassed, runChecks } from "../../src/learn/checker";
 import type { ProgramResult, ProgramRunner } from "../../src/learn/checker";
 import { escapeSpacesInStringLiterals } from "../../src/runners/c/prepare-source";
 import { workFolderSetup } from "../../src/runners/python/work-folder";
+import { parseInput } from "../../src/runners/arduino/board";
+import { runArduino } from "../helpers/arduino";
 import { runCpp } from "../helpers/clang";
 import { StepLimitError, runCWithLimit } from "../helpers/jscpp";
 
@@ -119,6 +121,8 @@ describe("compileLesson", () => {
     ["a data file name with a folder", `${HEADER}---${BODY}\n\`\`\`text {role=file file=data/x.txt}\nx\n\`\`\`\n`, /needs file=<name>/],
     ["two data files with one name", `${HEADER}---${BODY}\n\`\`\`text {role=file file=x.txt}\na\n\`\`\`\n\n\`\`\`text {role=file file=x.txt}\nb\n\`\`\`\n`, /second data file called x.txt/],
     ["a file check in a MATLAB lesson", `${HEADER.replace("language: c", "language: matlab")}checks:\n  - {type: file-equals, file: out.txt, expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```matlab")}`, /file-equals only works in C and Python/],
+    ["a pins check outside Arduino", `${HEADER}checks:\n  - {type: pins, expect: "0 ms: pin 13 HIGH"}\n---${BODY}${TRY}`, /only work in Arduino lessons/],
+    ["a badly written board input", `${HEADER.replace("language: c", "language: arduino")}checks:\n  - {type: pins, inputs: ["press the button"], expect: "x"}\n---${BODY}${TRY.replace(/```c/g, "```arduino")}`, /should look like "2 HIGH at 1200"/],
     ["no kid block", `${HEADER}---\nNormal text.\n`, /no "::: kid" block/],
     ["no explanation", `${HEADER}---\n::: kid\nHi there.\n:::\n`, /no explanation/],
     ["a long kid sentence", `${HEADER}---\nText.\n\n::: kid\nThis sentence just keeps on going and going with far too many words in it.\n:::\n`, /sentence has 15 words/],
@@ -254,8 +258,15 @@ const cppRunner: ProgramRunner = async (code, stdin): Promise<ProgramResult> => 
   return { stdout: result.stdout, ok: result.error === null, ...(result.error === null ? {} : { error: result.error }) };
 };
 
+// Arduino lessons run on the virtual board, with the check's board time and inputs.
+const arduinoRunner: ProgramRunner = async (code, _stdin, sim): Promise<ProgramResult> => {
+  const result = await runArduino(code, { runMs: sim?.ms, inputs: (sim?.inputs ?? []).map(parseInput) });
+  return { stdout: result.serial, ok: result.error === null, pins: result.timeline, ...(result.error === null ? {} : { error: result.error }) };
+};
+
 function runnerFor(language: Lesson["language"], files: readonly DataFile[]): ProgramRunner | undefined {
   if (language === "cpp") return cppRunner;
+  if (language === "arduino") return arduinoRunner;
   if (language === "c") return cRunner(files);
   return language === "python" ? pythonRunner(files) : undefined;
 }
@@ -307,6 +318,7 @@ describe("lesson library", () => {
     const example = item.example!;
     const result = await runnerFor(example.language, item.files)!(example.code, []);
     expect(result.error).toBeUndefined();
-    expect(result.stdout.trim().length).toBeGreaterThan(0);
+    // A sketch that only drives pins shows its work in the pin timeline.
+    expect((result.stdout + (result.pins ?? []).join("")).trim().length).toBeGreaterThan(0);
   }, 60_000);
 });

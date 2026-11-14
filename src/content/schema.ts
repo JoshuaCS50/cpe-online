@@ -10,15 +10,19 @@ export const TRACK_IDS = ["core", "embedded", "plc", "control"] as const;
 export type TrackId = (typeof TRACK_IDS)[number];
 
 /** Languages a lesson's code can be written in. Each one runs in the browser. */
-export const LESSON_LANGUAGES = ["c", "cpp", "python", "matlab"] as const;
+export const LESSON_LANGUAGES = ["c", "cpp", "arduino", "python", "matlab"] as const;
 export type LessonLanguage = (typeof LESSON_LANGUAGES)[number];
 
 const stdin = z.array(z.string()).default([]);
+/** Arduino lessons: inputs on the virtual board over time, such as "2 LOW at 500" or "A0 512 at 0". */
+const inputs = z.array(z.string()).optional();
+/** Arduino lessons: how much board time to run, in ms. */
+const ms = z.number().int().positive().max(60_000).optional();
 
 /** How "Check my answer" decides whether a program is right. */
 export const checkSchema = z.discriminatedUnion("type", [
   /** Output must equal `expect`. Trailing spaces and blank lines at the end are ignored. */
-  z.strictObject({ type: z.literal("stdout-equals"), stdin, expect: z.string() }),
+  z.strictObject({ type: z.literal("stdout-equals"), stdin, expect: z.string(), inputs, ms }),
   /** Output must match the regular expression. */
   z.strictObject({ type: z.literal("stdout-regex"), stdin, pattern: z.string().min(1), message: z.string().optional() }),
   /** The program is run once per case; every case must produce its output. */
@@ -30,6 +34,8 @@ export const checkSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("code-contains"), pattern: z.string().min(1), message: z.string().min(1) }),
   /** After the run, the file the program wrote must hold `expect` (compared like output). C only. */
   z.strictObject({ type: z.literal("file-equals"), stdin, file: z.string().min(1), expect: z.string() }),
+  /** Arduino only: the pins over time must be `expect`, one change per line, such as "500 ms: pin 13 LOW". */
+  z.strictObject({ type: z.literal("pins"), inputs, ms, expect: z.string() }),
 ]);
 export type Check = z.infer<typeof checkSchema>;
 

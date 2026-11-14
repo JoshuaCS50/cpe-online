@@ -37,6 +37,7 @@
 import { Marked } from "marked";
 import { parse as parseYaml } from "yaml";
 
+import { parseInput } from "../runners/arduino/board";
 import { frontmatterSchema } from "./schema";
 import type { CodeSample, DataFile, Frontmatter, Lesson, LessonLanguage } from "./schema";
 import { findTrack, findUnit } from "./tracks";
@@ -83,13 +84,15 @@ const FENCE_LANGUAGES: Record<string, LessonLanguage> = {
   c: "c",
   cpp: "cpp",
   "c++": "cpp",
+  arduino: "arduino",
+  ino: "arduino",
   python: "python",
   py: "python",
   matlab: "matlab",
   octave: "matlab",
 };
 
-const DEFAULT_FILE: Record<LessonLanguage, string> = { c: "main.c", cpp: "main.cpp", python: "main.py", matlab: "main.m" };
+const DEFAULT_FILE: Record<LessonLanguage, string> = { c: "main.c", cpp: "main.cpp", arduino: "sketch.ino", python: "main.py", matlab: "main.m" };
 
 const ROLES = ["example", "starter", "solution"] as const;
 type Role = (typeof ROLES)[number];
@@ -326,8 +329,20 @@ export function compileLesson(source: string, file: string): Lesson {
       problems.push(`hints (${frontmatter.hints.length}) and hintsKid (${frontmatter.hintsKid.length}) must have the same number of entries`);
     }
     for (const check of frontmatter.checks) {
-      if (check.type === "file-equals" && (frontmatter.language === "matlab" || frontmatter.language === "cpp")) {
+      if (check.type === "file-equals" && (frontmatter.language === "matlab" || frontmatter.language === "cpp" || frontmatter.language === "arduino")) {
         problems.push("check file-equals only works in C and Python lessons; C++ and MATLAB programs cannot write files here yet");
+      }
+      // Board inputs and pin checks only mean something for sketches.
+      const boardCheck = check.type === "pins" || (check.type === "stdout-equals" && (check.inputs !== undefined || check.ms !== undefined));
+      if (boardCheck && frontmatter.language !== "arduino") problems.push(`check ${check.type}: pins, inputs and ms only work in Arduino lessons`);
+      if ((check.type === "pins" || check.type === "stdout-equals") && check.inputs) {
+        for (const input of check.inputs) {
+          try {
+            parseInput(input);
+          } catch (error) {
+            problems.push(`check ${check.type}: ${(error as Error).message}`);
+          }
+        }
       }
       if (check.type !== "stdout-regex" && check.type !== "code-contains") continue;
       try {

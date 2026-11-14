@@ -1,7 +1,7 @@
 // Moving files between the app and the user's device.
 
 /** File types offered when opening from the device. */
-export const OPENABLE_EXTENSIONS = ".c,.cpp,.cc,.cxx,.h,.hpp,.hh,.py,.java,.m,.txt,.csv,.tsv,.dat,.log,.json,.md";
+export const OPENABLE_EXTENSIONS = ".c,.cpp,.ino,.cc,.cxx,.h,.hpp,.hh,.py,.java,.m,.txt,.csv,.tsv,.dat,.log,.json,.md";
 
 /** Saves `contents` to the device's downloads as `name`. */
 export function downloadFile(name: string, contents: string | Blob, mime = "text/plain"): void {

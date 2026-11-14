@@ -7,7 +7,7 @@ import type { ConsoleIO } from "../terminal/console";
 import type { ProgramResult, ProgramRunner } from "./checker";
 
 /** Generous: the first run of Python or MATLAB also downloads its runtime. */
-const TIME_LIMIT_MS: Record<LessonLanguage, number> = { c: 15_000, cpp: 120_000, python: 120_000, matlab: 180_000 };
+const TIME_LIMIT_MS: Record<LessonLanguage, number> = { c: 15_000, cpp: 120_000, arduino: 120_000, python: 120_000, matlab: 180_000 };
 
 interface CaptureConsole extends ConsoleIO {
   stdout(): string;
@@ -48,7 +48,7 @@ export function createCaptureConsole(stdin: readonly string[]): CaptureConsole {
 /** A runner for the checker. `signal` lets the learner cancel a check in progress. */
 /** `files` are the data files the program can open; each run starts from a fresh copy. */
 export function createProgramRunner(language: LessonLanguage, fileName: string, signal?: AbortSignal, files: Record<string, string> = {}): ProgramRunner {
-  return async (code, stdin): Promise<ProgramResult> => {
+  return async (code, stdin, sim): Promise<ProgramResult> => {
     const consoleIO = createCaptureConsole(stdin);
     const abort = new AbortController();
     const cancel = (): void => abort.abort();
@@ -60,6 +60,7 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
     }, TIME_LIMIT_MS[language]);
     let error: string | undefined;
     let filesAfter: Record<string, string> | undefined;
+    let pins: string[] | undefined;
     try {
       const result = await runProgram({
         language,
@@ -70,6 +71,8 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
         onError: (raw) => void (error = raw.text),
         files: { ...files },
         onFiles: (after) => void (filesAfter = after),
+        sim: { runMs: sim?.ms, inputs: sim?.inputs },
+        onBoard: (timeline) => void (pins = timeline),
       });
       return {
         stdout: consoleIO.stdout(),
@@ -77,6 +80,7 @@ export function createProgramRunner(language: LessonLanguage, fileName: string, 
         // input; only a real error, a time-out or a stop counts as failing.
         ok: error === undefined && !timedOut && !result.stopped,
         files: filesAfter ?? { ...files },
+        ...(pins ? { pins } : {}),
         ...(error ? { error } : {}),
         ...(timedOut ? { timedOut } : {}),
       };
